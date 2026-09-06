@@ -53,12 +53,16 @@ wandb_ready() {
   return 1
 }
 
-# wandb run: keep the official logger and record train/play clips (mjlab --video).
-# No wandb: tensorboard so Jobs do not die at wandb.init. MICRODUCK_TRAIN_VIDEO=0 skips clips.
+# wandb run: keep the official logger. mjlab --video needs a GL context;
+# HF Jobs images die at mjr_makeContext (no EGL/X11). Record clips locally
+# (play.sh) or on MICRODUCK_TRAIN_LOCAL=1. MICRODUCK_TRAIN_VIDEO=1 forces
+# --video even on Jobs (likely fail). MICRODUCK_TRAIN_VIDEO=0 skips clips.
 append_watch_args() {
   if wandb_ready; then
-    if [ "${MICRODUCK_TRAIN_VIDEO:-1}" != "0" ]; then
-      ARGS+=(--video)
+    if [ "${MICRODUCK_TRAIN_LOCAL:-}" = "1" ] && [ "${MICRODUCK_TRAIN_VIDEO:-1}" != "0" ]; then
+      ARGS+=(--video True)
+    elif [ "${MICRODUCK_TRAIN_VIDEO:-}" = "1" ]; then
+      ARGS+=(--video True)
     fi
   else
     ARGS+=(--agent.logger tensorboard)

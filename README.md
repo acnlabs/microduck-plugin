@@ -27,7 +27,7 @@ git clone https://github.com/acnlabs/microduck-plugin
 
 If the client only scans Agent Skills (not plugins), point it at `skills/microduck-skill`.
 
-**v0 scope:** new behavior → smoke → train (default: Hugging Face Jobs, requires `MICRODUCK_HF_NAMESPACE`) → official ONNX export → Hub publish. Optional `wandb login` turns on webpage curves and `--video` clips. `play.sh` is local Viser, not Jobs. `robotctl` is printed, not executed, unless you explicitly ask to install on a real robot.
+**v0 scope:** new behavior → smoke → train (default: Hugging Face Jobs, requires `MICRODUCK_HF_NAMESPACE`) → official ONNX export → Hub publish. Optional `wandb login` turns on webpage curves. Jobs cannot record `--video` (no OpenGL). `play.sh` is local Viser + local mp4. `robotctl` is printed, not executed, unless you explicitly ask to install on a real robot.
 
 Package CI (no GPU): `python3 scripts/ci_check.py`
 

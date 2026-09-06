@@ -69,7 +69,7 @@ Jobs **requires** `MICRODUCK_HF_NAMESPACE` (no interactive prompt). Billing is c
 
 No `WANDB_API_KEY` / `~/.netrc` wandb login: `smoke.sh` / `train.sh` pass `--agent.logger tensorboard` and `--no-wandb`. Official `--no-wandb` only skips forwarding the key; without the logger switch the remote job dies at `wandb.init`.
 
-With wandb logged in, the same scripts keep the official wandb logger and pass `--video`. Training writes short mp4s (`video_interval` 2000, `video_length` 200) and the runner uploads them to the run (project `mjlab_microduck`). `MICRODUCK_TRAIN_VIDEO=0` skips clips (curves still log). Replay on this machine:
+With wandb logged in, the same scripts keep the official wandb logger (project `mjlab_microduck`). **Jobs does not pass `--video`**: the HF image has no working OpenGL, and `mujoco.Renderer` dies at `mjr_makeContext`. Curves still appear on the run page. Clips: `$SKILL/scripts/play.sh` on this machine, or local CUDA train (`MICRODUCK_TRAIN_LOCAL=1`). `MICRODUCK_TRAIN_VIDEO=1` forces `--video True` on Jobs (expected to fail). `MICRODUCK_TRAIN_VIDEO=0` skips clips on local train. Replay:
 
 ```bash
 $SKILL/scripts/play.sh Mjlab-Your-Task-Id --checkpoint-file /path/model_N.pt

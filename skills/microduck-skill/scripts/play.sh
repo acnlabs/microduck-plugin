@@ -34,7 +34,7 @@ cd "$RL_ROOT"
 VIEWER="${MICRODUCK_PLAY_VIEWER:-viser}"
 ARGS=("$TASK_ID" --viewer "$VIEWER")
 if [ "${MICRODUCK_PLAY_VIDEO:-1}" != "0" ]; then
-  ARGS+=(--video)
+  ARGS+=(--video True)
 fi
 ARGS+=("$@")
 

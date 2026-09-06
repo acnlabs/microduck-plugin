@@ -118,7 +118,7 @@ else
 fi
 
 if wandb_ready; then
-  note "wandb: ok (curves + --video clips on smoke/train)"
+  note "wandb: ok (Jobs: curves only; local CUDA/play.sh for clips)"
 else
   note "wandb: unset (optional). wandb login → webpage curves/videos; else tensorboard, no Hub clips"
 fi

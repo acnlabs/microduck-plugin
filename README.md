@@ -1,6 +1,6 @@
 # Microduck Agent Plugin
 
-[Agent Plugins 1.0](https://agent-plugins.org) package for the Microduck train → export → Hub publish loop. Not the robot firmware (`pollen-robotics/microduck`). Sibling of `acn/`, `dsh-plugin-acn/`.
+**https://github.com/acnlabs/microduck-plugin** · [Agent Plugins 1.0](https://agent-plugins.org) package for the Microduck train → export → Hub publish loop. Not the robot firmware (`pollen-robotics/microduck`). Sibling of `acn/`, `dsh-plugin-acn/`.
 
 Clients that implement the spec discover this folder by `plugin.json`, then load `skills/microduck-rl`. The directory name stays `microduck-plugin` so it does not collide with the robot repo.
 
@@ -40,7 +40,7 @@ export MICRODUCK_RL_ROOT=...
 export MICRODUCK_HF_NAMESPACE=<hf-user-or-org>
 ```
 
-This directory is its own git repo. `plugin.json` still has no `repository` until a remote exists — do not point it at `pollen-robotics/microduck_rl`. The parent agentplanet tree lists `microduck-plugin/` in `.gitignore`.
+Public repo: https://github.com/acnlabs/microduck-plugin. The parent agentplanet tree lists `microduck-plugin/` in `.gitignore`. Do not point `repository` at `pollen-robotics/microduck_rl`.
 
 Upstream:
 

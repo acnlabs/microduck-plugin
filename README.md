@@ -1,5 +1,7 @@
 # Microduck Agent Plugin
 
+[![CI](https://github.com/acnlabs/microduck-plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/acnlabs/microduck-plugin/actions/workflows/ci.yml)
+
 **https://github.com/acnlabs/microduck-plugin** · [Agent Plugins 1.0](https://agent-plugins.org) package for the Microduck train → export → Hub publish loop. Not the robot firmware (`pollen-robotics/microduck`). Sibling of `acn/`, `dsh-plugin-acn/`.
 
 Clients that implement the spec discover this folder by `plugin.json`, then load `skills/microduck-rl`. The directory name stays `microduck-plugin` so it does not collide with the robot repo.
@@ -31,6 +33,8 @@ In this agentplanet workspace those links already exist:
 - `.cursor/skills/microduck-rl` → `microduck-plugin/skills/microduck-rl`
 
 **v0 scope:** new behavior → smoke → train (default: Hugging Face Jobs, requires `MICRODUCK_HF_NAMESPACE`) → official ONNX export → Hub publish. `robotctl` is printed, not executed, unless the user explicitly asks to install on a real robot.
+
+Package CI (no GPU): `python3 scripts/ci_check.py`
 
 Ready-check:
 

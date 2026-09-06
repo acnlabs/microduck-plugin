@@ -17,11 +17,11 @@ if jobs_mode; then
   require_jobs_ready
   set_jobs_extra
   ARGS+=("${JOBS_EXTRA[@]}")
-  echo "microduck-rl: smoke $TASK_ID on Hugging Face Jobs (namespace=$MICRODUCK_HF_NAMESPACE)"
+  echo "microduck-skill: smoke $TASK_ID on Hugging Face Jobs (namespace=$MICRODUCK_HF_NAMESPACE)"
 else
-  echo "microduck-rl: smoke $TASK_ID locally (MICRODUCK_TRAIN_LOCAL=1)"
+  echo "microduck-skill: smoke $TASK_ID locally (MICRODUCK_TRAIN_LOCAL=1)"
 fi
 
-echo "microduck-rl: uv run train ${ARGS[*]}  (cwd=$RL_ROOT)"
+echo "microduck-skill: uv run train ${ARGS[*]}  (cwd=$RL_ROOT)"
 uv run train "${ARGS[@]}"
-echo "microduck-rl: smoke ok"
+echo "microduck-skill: smoke ok"

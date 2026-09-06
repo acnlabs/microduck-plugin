@@ -1,7 +1,7 @@
 # Shared by smoke.sh / train.sh / export_publish.sh / doctor.sh. Source only.
 
 die() {
-  echo "microduck-rl: $*" >&2
+  echo "microduck-skill: $*" >&2
   exit 1
 }
 

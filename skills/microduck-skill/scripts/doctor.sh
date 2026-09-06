@@ -41,7 +41,7 @@ done
 
 DEFAULT_RL="${MICRODUCK_RL_ROOT:-$HOME/.local/src/microduck_rl}"
 fail=0
-note() { echo "microduck-rl: $*"; }
+note() { echo "microduck-skill: $*"; }
 
 if [ "$CLONE" -eq 1 ]; then
   require_cmd git

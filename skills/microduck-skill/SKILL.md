@@ -1,11 +1,11 @@
 ---
-name: microduck-rl
+name: microduck-skill
 description: Train, export, and publish Microduck reinforcement-learning policies (PPO on MuJoCo Warp via mjlab), then print gated robotctl commands. Use when the user wants to teach a Microduck a new trick, train a gait or episodic policy, run microduck_rl, export ONNX, publish to Hugging Face Hub, or use Hugging Face Jobs. Do not SSH or run robotctl unless the user explicitly asks to install on a real robot.
 license: MIT
 compatibility: "Requires uv, HF_TOKEN, and MICRODUCK_HF_NAMESPACE (Jobs is the default trainer). Optional: WANDB_API_KEY, MICRODUCK_RL_ROOT, MICRODUCK_TRAIN_LOCAL=1 (needs NVIDIA CUDA). Real-robot deploy needs explicit user approval."
 metadata:
   author: acnlabs
-  version: "0.1.5"
+  version: "0.1.6"
   upstream_rl: "https://github.com/pollen-robotics/microduck_rl"
   upstream_runtime: "https://github.com/pollen-robotics/microduck"
   default_train: "hf-jobs"
@@ -17,7 +17,7 @@ Close the software loop: **spec → sim → package → Hub**. You are training 
 
 Canonical playbook: `AGENTS.md` in `pollen-robotics/microduck_rl`. This skill is the job ticket; that file wins if they disagree.
 
-`$SKILL` = directory that contains this `SKILL.md`. Always invoke scripts with that absolute path. The skill id is `microduck-rl`, not `microduck-rl-skill` — it already lives under `skills/`.
+`$SKILL` = directory that contains this `SKILL.md`. Always invoke scripts with that absolute path. The skill id is `microduck-skill`.
 
 ## Preconditions
 

@@ -74,14 +74,14 @@ if [ -z "$ONNX" ]; then
   ONNX="$RL_ROOT/.microduck-plugin-export.onnx"
   EXPORT=("$TASK" --wandb-run-path "$WANDB" --onnx-file "$ONNX")
   [ -n "$CHECKPOINT" ] && EXPORT+=(--checkpoint "$CHECKPOINT")
-  echo "microduck-rl: export ${EXPORT[*]}"
+  echo "microduck-skill: export ${EXPORT[*]}"
   uv run scripts/export.py "${EXPORT[@]}"
   [ -f "$ONNX" ] || die "export did not write $ONNX (refusing to search the tree)"
 else
   [ -f "$ONNX" ] || die "--onnx is not a file: $ONNX"
 fi
 
-echo "microduck-rl: gate $ONNX"
+echo "microduck-skill: gate $ONNX"
 uv run --with onnx python3 "$SCRIPT_DIR/gate_check.py" "$ONNX"
 
 PUB=(publish --onnx "$ONNX" --repo "$REPO" --kind "$KIND")
@@ -95,11 +95,11 @@ PUB=(publish --onnx "$ONNX" --repo "$REPO" --kind "$KIND")
 [ "$CHAIN" -eq 1 ] && PUB+=(--chain)
 PUB+=("${EXTRA[@]}")
 
-echo "microduck-rl: uv run ${PUB[*]}"
+echo "microduck-skill: uv run ${PUB[*]}"
 uv run "${PUB[@]}"
 
 echo
-echo "microduck-rl: published $REPO"
+echo "microduck-skill: published $REPO"
 echo "Print, do not run, unless the user asked to install on a real robot:"
 case "$KIND" in
   episodic)

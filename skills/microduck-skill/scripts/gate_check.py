@@ -55,7 +55,7 @@ def inspect(path: Path) -> dict:
         import onnx  # type: ignore
     except ImportError as exc:
         raise SystemExit(
-            "microduck-rl: need `onnx`. Use: uv run --with onnx python3 "
+            "microduck-skill: need `onnx`. Use: uv run --with onnx python3 "
             f"scripts/gate_check.py  ({exc})"
         ) from exc
 
@@ -81,7 +81,7 @@ def ok_shape(shape: list[int | None], expected: list[int]) -> bool:
 
 def pick_io(entries: list[dict], expected: list[int], kind: str) -> list[int | None]:
     if not entries:
-        print(f"microduck-rl: graph has no {kind}", file=sys.stderr)
+        print(f"microduck-skill: graph has no {kind}", file=sys.stderr)
         raise SystemExit(1)
     for item in entries:
         if ok_shape(item["shape"], expected):
@@ -94,7 +94,7 @@ def main() -> int:
     p.add_argument("onnx", type=Path)
     args = p.parse_args()
     if not args.onnx.is_file():
-        print(f"microduck-rl: not a file: {args.onnx}", file=sys.stderr)
+        print(f"microduck-skill: not a file: {args.onnx}", file=sys.stderr)
         return 2
 
     info = inspect(args.onnx)
@@ -104,13 +104,13 @@ def main() -> int:
     out = pick_io(info["outputs"], [1, 14], "outputs")
     if not ok_shape(inn, [1, 61]) or not ok_shape(out, [1, 14]):
         print(
-            "microduck-rl: refused — expected [1,61] -> [1,14], "
+            "microduck-skill: refused — expected [1,61] -> [1,14], "
             f"got {inn} -> {out}. Use scripts/export.py; never hand-convert.",
             file=sys.stderr,
         )
         return 1
 
-    print("microduck-rl: gate ok ([1,61] -> [1,14])")
+    print("microduck-skill: gate ok ([1,61] -> [1,14])")
     return 0
 
 

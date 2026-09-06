@@ -18,9 +18,9 @@ if jobs_mode; then
   require_jobs_ready
   set_jobs_extra
   ARGS+=("${JOBS_EXTRA[@]}")
-  echo "microduck-rl: Hugging Face Jobs train $TASK_ID (namespace=$MICRODUCK_HF_NAMESPACE)"
+  echo "microduck-skill: Hugging Face Jobs train $TASK_ID (namespace=$MICRODUCK_HF_NAMESPACE)"
 else
-  echo "microduck-rl: local train (MICRODUCK_TRAIN_LOCAL=1)"
+  echo "microduck-skill: local train (MICRODUCK_TRAIN_LOCAL=1)"
 fi
 
 if ! caller_set_num_envs "$@"; then
@@ -28,5 +28,5 @@ if ! caller_set_num_envs "$@"; then
 fi
 
 ARGS+=("$@")
-echo "microduck-rl: uv run train ${ARGS[*]}  (cwd=$RL_ROOT)"
+echo "microduck-skill: uv run train ${ARGS[*]}  (cwd=$RL_ROOT)"
 uv run train "${ARGS[@]}"

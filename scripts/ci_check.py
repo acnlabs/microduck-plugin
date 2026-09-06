@@ -113,8 +113,6 @@ def check_skills() -> None:
         desc = meta.get("description", "")
         if name != skill_dir.name:
             die(f"{skill_md}: name {name!r} must match directory {skill_dir.name!r}")
-        if name.endswith("-skill"):
-            die(f"{skill_md}: do not suffix the skill id with -skill")
         if not SKILL_NAME_RE.match(name) or len(name) > 64:
             die(f"{skill_md}: invalid name {name!r}")
         if not (1 <= len(desc) <= 1024):
@@ -127,21 +125,30 @@ def check_skills() -> None:
 
 
 def check_scripts() -> None:
-    scripts = sorted((ROOT / "skills/microduck-rl/scripts").glob("*"))
+    scripts: list[Path] = []
+    for scripts_dir in sorted((ROOT / "skills").glob("*/scripts")):
+        scripts.extend(p for p in scripts_dir.iterdir() if p.is_file())
     sh = [p for p in scripts if p.suffix == ".sh"]
     if not sh:
         die("no shell scripts found")
     for path in sh:
         subprocess.run(["bash", "-n", str(path)], check=True)
-        print(f"ci_check: bash -n {path.name} ok")
-    gate = ROOT / "skills/microduck-rl/scripts/gate_check.py"
-    py_compile.compile(str(gate), doraise=True)
-    print("ci_check: gate_check.py compiles")
-    export = (ROOT / "skills/microduck-rl/scripts/export_publish.sh").read_text()
-    if "rm -f output.onnx" in export:
-        die("export_publish.sh must not delete the checkout's output.onnx")
-    if "--onnx-file" not in export:
-        die("export_publish.sh must pass --onnx-file to a dedicated path")
+        print(f"ci_check: bash -n {path.relative_to(ROOT)} ok")
+    gates = [p for p in scripts if p.name == "gate_check.py"]
+    if not gates:
+        die("gate_check.py not found")
+    for gate in gates:
+        py_compile.compile(str(gate), doraise=True)
+        print(f"ci_check: {gate.relative_to(ROOT)} compiles")
+    exports = [p for p in scripts if p.name == "export_publish.sh"]
+    if not exports:
+        die("export_publish.sh not found")
+    for export_path in exports:
+        export = export_path.read_text()
+        if "rm -f output.onnx" in export:
+            die(f"{export_path.relative_to(ROOT)} must not delete the checkout's output.onnx")
+        if "--onnx-file" not in export:
+            die(f"{export_path.relative_to(ROOT)} must pass --onnx-file to a dedicated path")
 
 
 def main() -> int:

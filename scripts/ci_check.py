@@ -149,6 +149,8 @@ def check_scripts() -> None:
             die(f"{export_path.relative_to(ROOT)} must not delete the checkout's output.onnx")
         if "--onnx-file" not in export:
             die(f"{export_path.relative_to(ROOT)} must pass --onnx-file to a dedicated path")
+        if re.search(r"PUB\+=\(--task", export):
+            die(f"{export_path.relative_to(ROOT)} must not pass --task to publish (conflicts with --onnx)")
 
 
 def main() -> int:

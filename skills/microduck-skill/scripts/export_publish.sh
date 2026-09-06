@@ -8,6 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 TASK=""
 WANDB=""
 CHECKPOINT=""
+CHECKPOINT_FILE=""
 REPO=""
 KIND=""
 DURATION=""
@@ -20,15 +21,19 @@ EXTRA=()
 
 usage() {
   cat <<'EOF'
-usage: export_publish.sh --task TASK_ID --wandb-run-path ENT/PROJ/RUN --repo USER/microduck-NAME --kind episodic|perpetual [options]
+usage: export_publish.sh --repo USER/microduck-NAME --kind episodic|perpetual [source] [options]
+
+source (exactly one export path):
+  --task TASK_ID --wandb-run-path ENT/PROJ/RUN
+  --task TASK_ID --checkpoint-file /path/model_N.pt
+  --onnx FILE             skip export; gate + publish this file only
 
 options:
-  --checkpoint N          forwarded to export.py and publish
+  --checkpoint N          wandb iteration (model_N.pt)
   --duration-s SEC        required for episodic
   --unwind-s SEC          perpetual held pose
   --slot walk|stand       perpetual gait slot
   --description TEXT
-  --onnx FILE             skip export; gate + publish this file only
   --chain                 episodic repeat-on-hold
   extra args are forwarded to `uv run publish`
 EOF
@@ -39,6 +44,7 @@ while [ $# -gt 0 ]; do
     --task) TASK="${2:-}"; shift 2 ;;
     --wandb-run-path) WANDB="${2:-}"; shift 2 ;;
     --checkpoint) CHECKPOINT="${2:-}"; shift 2 ;;
+    --checkpoint-file) CHECKPOINT_FILE="${2:-}"; shift 2 ;;
     --repo) REPO="${2:-}"; shift 2 ;;
     --kind) KIND="${2:-}"; shift 2 ;;
     --duration-s) DURATION="${2:-}"; shift 2 ;;
@@ -70,10 +76,14 @@ cd "$RL_ROOT"
 
 if [ -z "$ONNX" ]; then
   [ -n "$TASK" ] || die "missing --task (or pass --onnx)"
-  [ -n "$WANDB" ] || die "missing --wandb-run-path (or pass --onnx)"
+  if [ -z "$WANDB" ] && [ -z "$CHECKPOINT_FILE" ]; then
+    die "missing --wandb-run-path or --checkpoint-file (or pass --onnx)"
+  fi
   ONNX="$RL_ROOT/.microduck-plugin-export.onnx"
-  EXPORT=("$TASK" --wandb-run-path "$WANDB" --onnx-file "$ONNX")
+  EXPORT=("$TASK" --onnx-file "$ONNX")
+  [ -n "$WANDB" ] && EXPORT+=(--wandb-run-path "$WANDB")
   [ -n "$CHECKPOINT" ] && EXPORT+=(--checkpoint "$CHECKPOINT")
+  [ -n "$CHECKPOINT_FILE" ] && EXPORT+=(--checkpoint-file "$CHECKPOINT_FILE")
   echo "microduck-skill: export ${EXPORT[*]}"
   uv run scripts/export.py "${EXPORT[@]}"
   [ -f "$ONNX" ] || die "export did not write $ONNX (refusing to search the tree)"
@@ -84,16 +94,17 @@ fi
 echo "microduck-skill: gate $ONNX"
 uv run --with onnx python3 "$SCRIPT_DIR/gate_check.py" "$ONNX"
 
+# Upstream publish refuses --onnx plus --task/--wandb-run-path. Weights are
+# already an official ONNX; only manifest flags go to publish.
 PUB=(publish --onnx "$ONNX" --repo "$REPO" --kind "$KIND")
-[ -n "$TASK" ] && PUB+=(--task "$TASK")
-[ -n "$WANDB" ] && PUB+=(--wandb-run-path "$WANDB")
-[ -n "$CHECKPOINT" ] && PUB+=(--checkpoint "$CHECKPOINT")
 [ -n "$DURATION" ] && PUB+=(--duration-s "$DURATION")
 [ -n "$UNWIND" ] && PUB+=(--unwind-s "$UNWIND")
 [ -n "$SLOT" ] && PUB+=(--slot "$SLOT")
 [ -n "$DESCRIPTION" ] && PUB+=(--description "$DESCRIPTION")
 [ "$CHAIN" -eq 1 ] && PUB+=(--chain)
-PUB+=("${EXTRA[@]}")
+if [ "${#EXTRA[@]}" -gt 0 ]; then
+  PUB+=("${EXTRA[@]}")
+fi
 
 echo "microduck-skill: uv run ${PUB[*]}"
 uv run "${PUB[@]}"

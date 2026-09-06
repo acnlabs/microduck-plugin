@@ -65,7 +65,9 @@ $SKILL/scripts/train.sh Mjlab-Your-Task-Id --env.scene.num-envs 4096
 
 Smoke is 64 envs × 5 iters, **same compute as train**: Hugging Face Jobs unless `MICRODUCK_TRAIN_LOCAL=1`. Official claim: catches ~95% of config errors. Never launch a long run without it.
 
-Jobs **requires** `MICRODUCK_HF_NAMESPACE` (no interactive prompt). Optional: `MICRODUCK_HF_FLAVOR` (`l4x1` default), `MICRODUCK_HF_TIMEOUT`. Extra CLI args on `train.sh` are forwarded (`--detach`, `--agent.max_iterations`, …).
+Jobs **requires** `MICRODUCK_HF_NAMESPACE` (no interactive prompt). Billing is charged to that namespace — an org with no Jobs credits will 402 even if the personal account is funded. Optional: `MICRODUCK_HF_FLAVOR` (`l4x1` default), `MICRODUCK_HF_TIMEOUT`. Extra CLI args on `train.sh` are forwarded (`--detach`, `--agent.max_iterations`, …).
+
+No `WANDB_API_KEY` / `~/.netrc` wandb login: `smoke.sh` / `train.sh` pass `--agent.logger tensorboard` and `--no-wandb`. Official `--no-wandb` only skips forwarding the key; without the logger switch the remote job dies at `wandb.init`.
 
 Budgets at 4096 envs: simple episodic ≈ 1000 iters; gaits / recovery 4000–6000. A usable walk is often 1–2 hours.
 

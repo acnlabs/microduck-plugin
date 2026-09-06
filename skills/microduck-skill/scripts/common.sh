@@ -47,10 +47,23 @@ require_jobs_ready() {
 }
 
 # Sets JOBS_EXTRA. Call after require_jobs_ready. Bash 3 compatible (no nameref).
+wandb_ready() {
+  [ -n "${WANDB_API_KEY:-}" ] && return 0
+  [ -f "$HOME/.netrc" ] && grep -q wandb.ai "$HOME/.netrc" && return 0
+  return 1
+}
+
 set_jobs_extra() {
   JOBS_EXTRA=(--hf-jobs --namespace "$MICRODUCK_HF_NAMESPACE")
-  [ -n "${MICRODUCK_HF_FLAVOR:-}" ] && JOBS_EXTRA+=(--flavor "$MICRODUCK_HF_FLAVOR")
-  [ -n "${MICRODUCK_HF_TIMEOUT:-}" ] && JOBS_EXTRA+=(--timeout "$MICRODUCK_HF_TIMEOUT")
+  if [ -n "${MICRODUCK_HF_FLAVOR:-}" ]; then
+    JOBS_EXTRA+=(--flavor "$MICRODUCK_HF_FLAVOR")
+  fi
+  if [ -n "${MICRODUCK_HF_TIMEOUT:-}" ]; then
+    JOBS_EXTRA+=(--timeout "$MICRODUCK_HF_TIMEOUT")
+  fi
+  if ! wandb_ready; then
+    JOBS_EXTRA+=(--no-wandb)
+  fi
 }
 
 caller_set_num_envs() {

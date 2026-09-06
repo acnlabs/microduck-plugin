@@ -8,15 +8,17 @@ From `MICRODUCK_RL_ROOT`:
 
 ```bash
 uv run scripts/export.py <TASK_ID> --wandb-run-path <entity/project/run_id>
+# or, after a Jobs/tensorboard run with no wandb:
+uv run scripts/export.py <TASK_ID> --checkpoint-file /path/model_N.pt --onnx-file "$MICRODUCK_RL_ROOT/.microduck-plugin-export.onnx"
 ```
 
 Then gate (from `MICRODUCK_RL_ROOT`; do not `find` other `.onnx` files):
 
 ```bash
-uv run --with onnx python3 $SKILL/scripts/gate_check.py "$MICRODUCK_RL_ROOT/output.onnx"
+uv run --with onnx python3 $SKILL/scripts/gate_check.py "$MICRODUCK_RL_ROOT/.microduck-plugin-export.onnx"
 ```
 
-Refuse anything that is not `[1,61] → [1,14]`. Legacy 51-D graphs are invalid. Prefer the wrapper, which exports **only** to `$MICRODUCK_RL_ROOT/output.onnx`, gates, then uploads:
+Refuse anything that is not `[1,61] → [1,14]`. Legacy 51-D graphs are invalid. Prefer the wrapper, which exports **only** to `$MICRODUCK_RL_ROOT/.microduck-plugin-export.onnx`, gates, then uploads `--onnx` (upstream `publish` rejects `--onnx` plus `--task`):
 
 ```bash
 $SKILL/scripts/export_publish.sh \

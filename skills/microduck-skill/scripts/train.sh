@@ -14,6 +14,9 @@ resolve_rl_root
 cd "$RL_ROOT"
 
 ARGS=("$TASK_ID")
+if ! wandb_ready; then
+  ARGS+=(--agent.logger tensorboard)
+fi
 if jobs_mode; then
   require_jobs_ready
   set_jobs_extra

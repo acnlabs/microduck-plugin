@@ -1,11 +1,11 @@
 ---
 name: microduck-skill
-description: Train, export, and publish Microduck reinforcement-learning policies (PPO on MuJoCo Warp via mjlab), then print gated robotctl commands. Use when the user wants to teach a Microduck a new trick, train a gait or episodic policy, run microduck_rl, export ONNX, publish to Hugging Face Hub, or use Hugging Face Jobs. Do not SSH or run robotctl unless the user explicitly asks to install on a real robot.
+description: Train, export, publish, and deploy Microduck reinforcement-learning policies (PPO on MuJoCo Warp via mjlab) onto a real robot via robotctl. Use when the user wants to teach a Microduck a new trick, train a gait or episodic policy, run microduck_rl, export ONNX, publish to Hugging Face Hub, use Hugging Face Jobs, or install a published policy on a duck they own. After Hub publish, always walk deploy. Print robotctl; run it only when that user explicitly asks to install on their robot. Never SSH or robotctl on a machine they do not own.
 license: MIT
 compatibility: "Requires uv, HF_TOKEN, and MICRODUCK_HF_NAMESPACE (Jobs is the default trainer). Optional: WANDB_API_KEY, MICRODUCK_RL_ROOT, MICRODUCK_TRAIN_LOCAL=1 (needs NVIDIA CUDA). Real-robot deploy needs explicit user approval."
 metadata:
   author: acnlabs
-  version: "0.1.9"
+  version: "0.1.10"
   upstream_rl: "https://github.com/pollen-robotics/microduck_rl"
   upstream_runtime: "https://github.com/pollen-robotics/microduck"
   default_train: "hf-jobs"
@@ -13,7 +13,7 @@ metadata:
 
 # Microduck RL
 
-Close the software loop: **spec → sim → package → Hub**. You are training a 61→14 PPO policy, not an LLM.
+Close the loop: **spec → sim → package → Hub → robot**. You are training a 61→14 PPO policy, not an LLM. Hub publish is not the end — deploy is in scope. A published repo is a deliverable for whoever owns a duck, not a baked-in official weight.
 
 Canonical playbook: `AGENTS.md` in `pollen-robotics/microduck_rl`. This skill is the job ticket; that file wins if they disagree.
 
@@ -40,7 +40,7 @@ Canonical playbook: `AGENTS.md` in `pollen-robotics/microduck_rl`. This skill is
 1. **Spec** — one-line behavior, `kind` (`episodic` | `perpetual`), closest template. [references/TRAIN.md](references/TRAIN.md).
 2. **Sim** — edit env → CPU `pytest tests/` → `$SKILL/scripts/smoke.sh` → `$SKILL/scripts/train.sh`. If wandb is logged in, watch the run page (curves; Jobs cannot record `--video` — no GL in the image). Keep penalty `Episode_Reward/*` ≤ 0. If not, tensorboard + `--no-wandb` so Jobs do not hang. Replay a checkpoint with `$SKILL/scripts/play.sh` (Viser + local mp4).
 3. **Package** — `$SKILL/scripts/export_publish.sh`. [references/PUBLISH.md](references/PUBLISH.md). After a tensorboard run, export from `--checkpoint-file` (or an already-gated `--onnx`), not a wandb path.
-4. **Deploy (gated)** — print lines from [references/DEPLOY.md](references/DEPLOY.md). Wait.
+4. **Deploy** — always this stage after publish. Print the install lines from [references/DEPLOY.md](references/DEPLOY.md) for **this run's** `--repo` (never a hardcoded test repo). If the user explicitly says to install on a Microduck they own, run those `robotctl` lines. If they have no robot or did not ask, stop after printing. Do not claim hardware success until they report it.
 
 ## Scripts
 

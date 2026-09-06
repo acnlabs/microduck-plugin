@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/acnlabs/microduck-plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/acnlabs/microduck-plugin/actions/workflows/ci.yml)
 
-**https://github.com/acnlabs/microduck-plugin** · [Agent Plugins 1.0](https://agent-plugins.org) package for the Microduck train → export → Hub publish loop.
+**https://github.com/acnlabs/microduck-plugin** · [Agent Plugins 1.0](https://agent-plugins.org) package for the Microduck train → export → Hub → robot loop.
 
 This is **not** the robot firmware. That repo is [`pollen-robotics/microduck`](https://github.com/pollen-robotics/microduck). Compatible clients discover this folder via `plugin.json`, then load the skill `microduck-skill`.
 
@@ -27,7 +27,7 @@ git clone https://github.com/acnlabs/microduck-plugin
 
 If the client only scans Agent Skills (not plugins), point it at `skills/microduck-skill`.
 
-**v0 scope:** new behavior → smoke → train (default: Hugging Face Jobs, requires `MICRODUCK_HF_NAMESPACE`) → official ONNX export → Hub publish. Optional `wandb login` turns on webpage curves. Jobs cannot record `--video` (no OpenGL). `play.sh` is local Viser + local mp4. `robotctl` is printed, not executed, unless you explicitly ask to install on a real robot.
+**v0 scope:** new behavior → smoke → train (default: Hugging Face Jobs, requires `MICRODUCK_HF_NAMESPACE`) → official ONNX export → Hub publish → deploy. Optional `wandb login` turns on webpage curves. Jobs cannot record `--video` (no OpenGL). `play.sh` is local Viser + local mp4. After publish the skill always prints `robotctl` for that repo. It runs those commands only if you explicitly ask to install on a Microduck you own.
 
 Package CI (no GPU): `python3 scripts/ci_check.py`
 

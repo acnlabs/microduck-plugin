@@ -1,8 +1,8 @@
-# Deploy (gated)
+# Deploy
 
-Default: **print these commands. Do not run them.**
+Deploy is in scope. After every Hub publish, print the install lines for **this run's** repo. Do not hardcode a sample policy.
 
-Run `robotctl` / `ssh` only if the user explicitly asks to install on a real Microduck they own. A bad policy can beat XL330s. Sim metrics can pass while the video (or the floor) fails.
+Default: **print, then wait.** Run `robotctl` / `ssh` only if the user explicitly asks to install on a real Microduck they own. A bad policy can beat XL330s. Sim metrics can pass while the video (or the floor) fails.
 
 ## Rehearse in sim first
 
@@ -56,6 +56,6 @@ Bluetooth-only laptop path is `duckctl` (no wifi, no ssh). Same rule: do not inv
 
 ## Still not automatic
 
-- No robot on the network → stop after Hub publish.
-- User has not said "install on the robot" → stop after printing.
+- No robot / user did not ask to install → stop after printing. The loop still includes this stage.
+- User asked to install on a duck they own → run the printed `robotctl` for this repo only.
 - Battery, clear floor, and a human watching the first run are the user's problem. Do not claim the duck learned it until they say so.

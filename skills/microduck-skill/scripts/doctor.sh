@@ -117,7 +117,11 @@ else
   fi
 fi
 
-[ -n "${WANDB_API_KEY:-}" ] && note "WANDB_API_KEY: set" || note "WANDB_API_KEY: unset (optional; Jobs can forward it)"
+if wandb_ready; then
+  note "wandb: ok (curves + --video clips on smoke/train)"
+else
+  note "wandb: unset (optional). wandb login → webpage curves/videos; else tensorboard, no Hub clips"
+fi
 
 note "invoke scripts with an absolute path, e.g."
 note "  $SCRIPT_DIR/smoke.sh <TASK_ID>"

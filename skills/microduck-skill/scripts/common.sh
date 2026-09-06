@@ -1,4 +1,4 @@
-# Shared by smoke.sh / train.sh / export_publish.sh / doctor.sh. Source only.
+# Shared by smoke.sh / train.sh / play.sh / export_publish.sh / doctor.sh. Source only.
 
 die() {
   echo "microduck-skill: $*" >&2
@@ -51,6 +51,18 @@ wandb_ready() {
   [ -n "${WANDB_API_KEY:-}" ] && return 0
   [ -f "$HOME/.netrc" ] && grep -q wandb.ai "$HOME/.netrc" && return 0
   return 1
+}
+
+# wandb run: keep the official logger and record train/play clips (mjlab --video).
+# No wandb: tensorboard so Jobs do not die at wandb.init. MICRODUCK_TRAIN_VIDEO=0 skips clips.
+append_watch_args() {
+  if wandb_ready; then
+    if [ "${MICRODUCK_TRAIN_VIDEO:-1}" != "0" ]; then
+      ARGS+=(--video)
+    fi
+  else
+    ARGS+=(--agent.logger tensorboard)
+  fi
 }
 
 set_jobs_extra() {

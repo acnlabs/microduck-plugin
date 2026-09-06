@@ -13,9 +13,7 @@ resolve_rl_root
 cd "$RL_ROOT"
 
 ARGS=("$TASK_ID" --env.scene.num-envs 64 --agent.max_iterations 5)
-if ! wandb_ready; then
-  ARGS+=(--agent.logger tensorboard)
-fi
+append_watch_args
 if jobs_mode; then
   require_jobs_ready
   set_jobs_extra

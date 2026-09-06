@@ -5,7 +5,7 @@ license: MIT
 compatibility: "Requires uv, HF_TOKEN, and MICRODUCK_HF_NAMESPACE (Jobs is the default trainer). Optional: WANDB_API_KEY, MICRODUCK_RL_ROOT, MICRODUCK_TRAIN_LOCAL=1 (needs NVIDIA CUDA). Real-robot deploy needs explicit user approval."
 metadata:
   author: acnlabs
-  version: "0.1.7"
+  version: "0.1.8"
   upstream_rl: "https://github.com/pollen-robotics/microduck_rl"
   upstream_runtime: "https://github.com/pollen-robotics/microduck"
   default_train: "hf-jobs"
@@ -38,7 +38,7 @@ Canonical playbook: `AGENTS.md` in `pollen-robotics/microduck_rl`. This skill is
 ## Workflow (do not skip stages)
 
 1. **Spec** — one-line behavior, `kind` (`episodic` | `perpetual`), closest template. [references/TRAIN.md](references/TRAIN.md).
-2. **Sim** — edit env → CPU `pytest tests/` → `$SKILL/scripts/smoke.sh` → `$SKILL/scripts/train.sh`. If wandb is logged in, watch the main task term and keep penalty `Episode_Reward/*` ≤ 0. If not, scripts fall back to tensorboard + `--no-wandb` so Jobs do not hang.
+2. **Sim** — edit env → CPU `pytest tests/` → `$SKILL/scripts/smoke.sh` → `$SKILL/scripts/train.sh`. If wandb is logged in, scripts pass `--video` (clips on the run page) and you watch the main task term; keep penalty `Episode_Reward/*` ≤ 0. If not, tensorboard + `--no-wandb` so Jobs do not hang. Replay a checkpoint in the browser with `$SKILL/scripts/play.sh` (Viser + local mp4).
 3. **Package** — `$SKILL/scripts/export_publish.sh`. [references/PUBLISH.md](references/PUBLISH.md). After a tensorboard run, export from `--checkpoint-file` (or an already-gated `--onnx`), not a wandb path.
 4. **Deploy (gated)** — print lines from [references/DEPLOY.md](references/DEPLOY.md). Wait.
 
@@ -47,8 +47,9 @@ Canonical playbook: `AGENTS.md` in `pollen-robotics/microduck_rl`. This skill is
 | Script | Does |
 |---|---|
 | `scripts/doctor.sh [--clone] [--sync]` | Tools, checkout, Jobs env. |
-| `scripts/smoke.sh <TASK_ID>` | 64×5. Jobs unless `MICRODUCK_TRAIN_LOCAL=1`. |
-| `scripts/train.sh <TASK_ID> [args…]` | Same compute switch. Default 4096 envs. |
+| `scripts/smoke.sh <TASK_ID>` | 64×5. Jobs unless `MICRODUCK_TRAIN_LOCAL=1`. wandb → `--video`. |
+| `scripts/train.sh <TASK_ID> [args…]` | Same compute switch. Default 4096 envs. wandb → `--video`. |
+| `scripts/play.sh <TASK_ID> --checkpoint-file\|--wandb-run-path …` | Local Viser webpage + mp4. Not Jobs. |
 | `scripts/gate_check.py <policy.onnx>` | `[1,61]→[1,14]`; skip initializers. Called via `uv run --with onnx`. |
 | `scripts/export_publish.sh …` | Official export to `$RL_ROOT/.microduck-plugin-export.onnx` only, then Hub. |
 

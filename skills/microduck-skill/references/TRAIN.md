@@ -69,6 +69,15 @@ Jobs **requires** `MICRODUCK_HF_NAMESPACE` (no interactive prompt). Billing is c
 
 No `WANDB_API_KEY` / `~/.netrc` wandb login: `smoke.sh` / `train.sh` pass `--agent.logger tensorboard` and `--no-wandb`. Official `--no-wandb` only skips forwarding the key; without the logger switch the remote job dies at `wandb.init`.
 
+With wandb logged in, the same scripts keep the official wandb logger and pass `--video`. Training writes short mp4s (`video_interval` 2000, `video_length` 200) and the runner uploads them to the run (project `mjlab_microduck`). `MICRODUCK_TRAIN_VIDEO=0` skips clips (curves still log). Replay on this machine:
+
+```bash
+$SKILL/scripts/play.sh Mjlab-Your-Task-Id --checkpoint-file /path/model_N.pt
+# or --wandb-run-path <entity>/mjlab_microduck/<run_id>
+```
+
+`play.sh` defaults to `--viewer viser` (localhost webpage) and `--video` (mp4 under `logs/<experiment>/…/videos/play`). That clip stays local unless you upload it. `MICRODUCK_PLAY_VIDEO=0` or `MICRODUCK_PLAY_VIEWER=native` to change. Mac CPU play is slow.
+
 Budgets at 4096 envs: simple episodic ≈ 1000 iters; gaits / recovery 4000–6000. A usable walk is often 1–2 hours.
 
 ## Reading a run

@@ -6,7 +6,13 @@ Run `robotctl` / `ssh` only if the user explicitly asks to install on a real Mic
 
 ## Rehearse in sim first
 
-From `MICRODUCK_RL_ROOT`:
+Watch a checkpoint in the training env (localhost Viser, optional local mp4):
+
+```bash
+$SKILL/scripts/play.sh Mjlab-Velocity-Flat-MicroDuck --checkpoint-file /path/model_N.pt
+```
+
+ONNX / runtime contract (CPU MuJoCo, not Viser) from `MICRODUCK_RL_ROOT`:
 
 ```bash
 uv run scripts/infer_policy.py --walking output.onnx

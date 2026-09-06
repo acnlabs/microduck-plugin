@@ -71,13 +71,12 @@ cd "$RL_ROOT"
 if [ -z "$ONNX" ]; then
   [ -n "$TASK" ] || die "missing --task (or pass --onnx)"
   [ -n "$WANDB" ] || die "missing --wandb-run-path (or pass --onnx)"
-  rm -f output.onnx
-  EXPORT=("$TASK" --wandb-run-path "$WANDB")
+  ONNX="$RL_ROOT/.microduck-plugin-export.onnx"
+  EXPORT=("$TASK" --wandb-run-path "$WANDB" --onnx-file "$ONNX")
   [ -n "$CHECKPOINT" ] && EXPORT+=(--checkpoint "$CHECKPOINT")
   echo "microduck-rl: export ${EXPORT[*]}"
   uv run scripts/export.py "${EXPORT[@]}"
-  [ -f output.onnx ] || die "export did not write $RL_ROOT/output.onnx (refusing to search the tree)"
-  ONNX="$RL_ROOT/output.onnx"
+  [ -f "$ONNX" ] || die "export did not write $ONNX (refusing to search the tree)"
 else
   [ -f "$ONNX" ] || die "--onnx is not a file: $ONNX"
 fi

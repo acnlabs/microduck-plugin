@@ -1,9 +1,13 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "microduck-plugin",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Agent Plugins 1.0 package: train, export, and publish Microduck RL policies. Deploy to a real robot is gated.",
   "license": "MIT",
+  "author": {
+    "name": "acnlabs",
+    "url": "https://github.com/acnlabs"
+  },
   "keywords": [
     "agent-plugins",
     "microduck",

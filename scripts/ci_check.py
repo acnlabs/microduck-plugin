@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""GPU-free package checks. No third-party imports. Run from anywhere."""
+"""GPU-free package checks. No third-party imports. Validates plugin.json
+against the vendored Agent Plugins 1.0 schema in schemas/plugin.schema.json.
+"""
 
 from __future__ import annotations
 
@@ -11,21 +13,9 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-PLUGIN_NAME_RE = re.compile(r"^(?!.*(?:--|\\.\\.))[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$")
 SKILL_NAME_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$")
-ALLOWED_PLUGIN = {
-    "$schema",
-    "name",
-    "version",
-    "description",
-    "author",
-    "homepage",
-    "repository",
-    "license",
-    "keywords",
-    "extensions",
-}
-SCHEMA = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json"
+SCHEMA_PATH = ROOT / "schemas/plugin.schema.json"
+EXPECTED_PACKAGE_NAME = "microduck-plugin"
 
 
 def die(msg: str) -> None:
@@ -34,28 +24,48 @@ def die(msg: str) -> None:
 
 
 def check_plugin_json() -> None:
+    schema = json.loads(SCHEMA_PATH.read_text())
     raw = json.loads((ROOT / "plugin.json").read_text())
-    extra = set(raw) - ALLOWED_PLUGIN
-    if extra:
-        die(f"plugin.json unknown fields: {sorted(extra)}")
-    if raw.get("$schema") != SCHEMA:
-        die("plugin.json $schema must be Agent Plugins 1.0.0")
+
+    if schema.get("additionalProperties") is False:
+        extra = set(raw) - set(schema.get("properties", {}))
+        if extra:
+            die(f"plugin.json unknown fields vs {SCHEMA_PATH.name}: {sorted(extra)}")
+
+    for field in schema.get("required", []):
+        if field not in raw:
+            die(f"plugin.json missing required field {field!r}")
+
+    schema_const = schema["properties"]["$schema"]["const"]
+    if raw.get("$schema") != schema_const:
+        die(f"plugin.json $schema must be {schema_const}")
+
+    name_spec = schema["properties"]["name"]
     name = raw.get("name")
-    if not isinstance(name, str) or not (1 <= len(name) <= 64) or not PLUGIN_NAME_RE.match(name):
-        die(f"plugin.json invalid name: {name!r}")
-    if name != "microduck-plugin":
-        die(f"plugin.json name must be microduck-plugin, got {name!r}")
+    if not isinstance(name, str):
+        die("plugin.json name must be a string")
+    if not (name_spec["minLength"] <= len(name) <= name_spec["maxLength"]):
+        die(f"plugin.json name length out of range: {name!r}")
+    if not re.match(name_spec["pattern"], name):
+        die(f"plugin.json name fails schema pattern: {name!r}")
+    if name != EXPECTED_PACKAGE_NAME:
+        die(f"plugin.json name must be {EXPECTED_PACKAGE_NAME}, got {name!r}")
+
     if "keywords" in raw:
         kws = raw["keywords"]
         if not isinstance(kws, list) or not all(isinstance(k, str) for k in kws):
             die("plugin.json keywords must be an array of strings")
     if "author" in raw:
         author = raw["author"]
-        if not isinstance(author, dict) or set(author) - {"name", "email", "url"}:
-            die("plugin.json author must only have name/email/url")
+        allowed = set(schema["properties"]["author"]["properties"])
+        if not isinstance(author, dict) or set(author) - allowed:
+            die(f"plugin.json author must only have {sorted(allowed)}")
+        if author.get("name") != "acnlabs":
+            die("plugin.json author.name must be acnlabs")
     if "extensions" in raw and not isinstance(raw["extensions"], dict):
         die("plugin.json extensions must be an object")
-    print("ci_check: plugin.json ok")
+
+    print(f"ci_check: plugin.json ok (schema {SCHEMA_PATH.relative_to(ROOT)})")
 
 
 def _frontmatter(text: str) -> dict[str, str]:
@@ -103,10 +113,14 @@ def check_skills() -> None:
         desc = meta.get("description", "")
         if name != skill_dir.name:
             die(f"{skill_md}: name {name!r} must match directory {skill_dir.name!r}")
+        if name.endswith("-skill"):
+            die(f"{skill_md}: do not suffix the skill id with -skill")
         if not SKILL_NAME_RE.match(name) or len(name) > 64:
             die(f"{skill_md}: invalid name {name!r}")
         if not (1 <= len(desc) <= 1024):
             die(f"{skill_md}: description must be 1–1024 characters (got {len(desc)})")
+        if "author: acnlabs" not in skill_md.read_text():
+            die(f"{skill_md}: metadata.author must be acnlabs")
         print(f"ci_check: {skill_md.relative_to(ROOT)} ok ({len(desc)}-char description)")
     if not found:
         die("no skills/*/SKILL.md found")
@@ -123,9 +137,16 @@ def check_scripts() -> None:
     gate = ROOT / "skills/microduck-rl/scripts/gate_check.py"
     py_compile.compile(str(gate), doraise=True)
     print("ci_check: gate_check.py compiles")
+    export = (ROOT / "skills/microduck-rl/scripts/export_publish.sh").read_text()
+    if "rm -f output.onnx" in export:
+        die("export_publish.sh must not delete the checkout's output.onnx")
+    if "--onnx-file" not in export:
+        die("export_publish.sh must pass --onnx-file to a dedicated path")
 
 
 def main() -> int:
+    if not SCHEMA_PATH.is_file():
+        die(f"missing vendored schema: {SCHEMA_PATH}")
     check_plugin_json()
     check_skills()
     check_scripts()

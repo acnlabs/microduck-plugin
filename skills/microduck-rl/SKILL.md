@@ -4,8 +4,8 @@ description: Train, export, and publish Microduck reinforcement-learning policie
 license: MIT
 compatibility: "Requires uv, HF_TOKEN, and MICRODUCK_HF_NAMESPACE (Jobs is the default trainer). Optional: WANDB_API_KEY, MICRODUCK_RL_ROOT, MICRODUCK_TRAIN_LOCAL=1 (needs NVIDIA CUDA). Real-robot deploy needs explicit user approval."
 metadata:
-  author: agentplanet
-  version: "0.1.4"
+  author: acnlabs
+  version: "0.1.5"
   upstream_rl: "https://github.com/pollen-robotics/microduck_rl"
   upstream_runtime: "https://github.com/pollen-robotics/microduck"
   default_train: "hf-jobs"
@@ -17,7 +17,7 @@ Close the software loop: **spec → sim → package → Hub**. You are training 
 
 Canonical playbook: `AGENTS.md` in `pollen-robotics/microduck_rl`. This skill is the job ticket; that file wins if they disagree.
 
-`$SKILL` = directory that contains this `SKILL.md`. Always invoke scripts with that absolute path.
+`$SKILL` = directory that contains this `SKILL.md`. Always invoke scripts with that absolute path. The skill id is `microduck-rl`, not `microduck-rl-skill` — it already lives under `skills/`.
 
 ## Preconditions
 

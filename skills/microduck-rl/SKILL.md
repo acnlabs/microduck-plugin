@@ -5,7 +5,7 @@ license: MIT
 compatibility: "Requires uv, HF_TOKEN, and MICRODUCK_HF_NAMESPACE (Jobs is the default trainer). Optional: WANDB_API_KEY, MICRODUCK_RL_ROOT, MICRODUCK_TRAIN_LOCAL=1 (needs NVIDIA CUDA). Real-robot deploy needs explicit user approval."
 metadata:
   author: agentplanet
-  version: "0.1.2"
+  version: "0.1.3"
   upstream_rl: "https://github.com/pollen-robotics/microduck_rl"
   upstream_runtime: "https://github.com/pollen-robotics/microduck"
   default_train: "hf-jobs"

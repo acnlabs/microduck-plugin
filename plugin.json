@@ -1,0 +1,15 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "microduck",
+  "version": "0.1.1",
+  "description": "Train, export, and publish Microduck RL policies. Deploy to a real robot is gated.",
+  "license": "MIT",
+  "keywords": [
+    "microduck",
+    "pollen-robotics",
+    "reinforcement-learning",
+    "sim2real",
+    "huggingface"
+  ],
+  "homepage": "https://pollen-robotics.com/microduck/"
+}

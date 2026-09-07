@@ -31,6 +31,19 @@ def main() -> int:
     except Exception as exc:
         print(f"microduck-skill: hub pull failed for {args.repo}: {exc}", file=sys.stderr)
         return 2
+    try:
+        hf_hub_download(repo_id=args.repo, filename="manifest.json", local_dir=str(dest))
+        print(f"microduck-skill: hub pulled manifest.json for {args.repo}", file=sys.stderr)
+    except Exception as exc:
+        name = type(exc).__name__
+        if name in {"EntryNotFoundError", "HfHubHTTPError"} and "404" in str(exc):
+            print(
+                f"microduck-skill: {args.repo} has no manifest.json; "
+                "twist stays walk caps unless you add one",
+                file=sys.stderr,
+            )
+        else:
+            print(f"microduck-skill: could not fetch manifest.json for {args.repo}: {exc}", file=sys.stderr)
     out = Path(path).resolve()
     if not out.is_file():
         print(f"microduck-skill: {args.repo} has no policy.onnx", file=sys.stderr)

@@ -50,11 +50,13 @@ Held perpetual pose (owner picks hold time):
 sudo robotctl policy add <skill-name> <user>/microduck-<name> --hold 5
 ```
 
-Replace a gait slot:
+Replace a gait slot (only if this repo is still a walk — read the printed hint):
 
 ```bash
 sudo robotctl policy load walk <user>/microduck-my-walk
 ```
+
+`control.sh start --repo` prints the hint from `manifest.json`. A remapped policy uses `policy add <name>`, not `load walk`. If the card says sim-only, print that and do not treat it as a walk install.
 
 Health / updates (only if the user is debugging a board):
 

@@ -21,6 +21,17 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+_SCRIPTS = Path(__file__).resolve().parent
+if str(_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS))
+from hub_manifest import (  # noqa: E402
+    WALK_COMMAND_NOTES,
+    WALK_TWIST_CAPS,
+    command_notes,
+    load_manifest,
+    twist_caps,
+)
+
 
 def _load_infer(rl_root: Path):
     path = rl_root / "scripts" / "infer_policy.py"
@@ -34,6 +45,11 @@ def _load_infer(rl_root: Path):
     return mod
 
 
+# Robot body, not a skill score. Spawn trunk z is 0.125 in infer_policy.
+FALLEN_TRUNK_Z_M = 0.06
+FALLEN_UPRIGHT = 0.5
+
+
 class ControlState:
     def __init__(self) -> None:
         self.lock = threading.Lock()
@@ -42,6 +58,18 @@ class ControlState:
         self.record_path: Path | None = None
         self.record_fh: Any = None
         self.record_steps = 0
+        self.manifest: dict[str, Any] | None = None
+        self.twist_caps = dict(WALK_TWIST_CAPS)
+        self.command_notes: dict[str, Any] = dict(WALK_COMMAND_NOTES)
+        self.joint_names: list[str] = []
+        self.foot_sites: dict[str, int | None] = {"left": None, "right": None}
+        self.foot_geoms: dict[str, int | None] = {"left": None, "right": None}
+
+
+def _apply_manifest(state: ControlState, manifest: dict[str, Any] | None) -> None:
+    state.manifest = manifest
+    state.twist_caps = twist_caps(manifest)
+    state.command_notes = command_notes(manifest)
 
 
 class SkillResult:
@@ -78,10 +106,11 @@ BODY_CAPS = {
 }
 
 
-def _clamp_twist(policy, x: float, y: float, yaw: float) -> tuple[float, float, float]:
-    x = max(policy.vel_min_x, min(policy.vel_max_x, x))
-    y = max(policy.vel_min_y, min(policy.vel_max_y, y))
-    yaw = max(-policy.vel_max_ang, min(policy.vel_max_ang, yaw))
+def _clamp_twist(state: ControlState, x: float, y: float, yaw: float) -> tuple[float, float, float]:
+    caps = state.twist_caps
+    x = max(-caps["x"], min(caps["x"], x))
+    y = max(-caps["y"], min(caps["y"], y))
+    yaw = max(-caps["yaw"], min(caps["yaw"], yaw))
     return x, y, yaw
 
 
@@ -230,6 +259,73 @@ def _skill_payload(policy, data, qpos_adr: int, state: ControlState, result: Ski
     return 200, payload
 
 
+def _fallen(trunk_z_m: float, projected_gravity: list[float], sit_mode: bool = False) -> bool:
+    upright = -float(projected_gravity[2])
+    if upright < FALLEN_UPRIGHT:
+        return True
+    if sit_mode:
+        return False
+    return trunk_z_m < FALLEN_TRUNK_Z_M
+
+
+def _bind_body(state: ControlState, model) -> None:
+    import mujoco
+
+    names: list[str] = []
+    for i in range(int(model.nu)):
+        jid = int(model.actuator_trnid[i, 0])
+        names.append(mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, jid) or f"actuator_{i}")
+    state.joint_names = names
+    for side, site, geom in (
+        ("left", "left_foot", "left_foot_collision"),
+        ("right", "right_foot", "right_foot_collision"),
+    ):
+        sid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SITE, site)
+        gid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, geom)
+        state.foot_sites[side] = sid if sid >= 0 else None
+        state.foot_geoms[side] = gid if gid >= 0 else None
+
+
+def _feet(model, data, state: ControlState) -> dict[str, dict[str, Any]]:
+    contacts = {"left": False, "right": False}
+    geom_to_side = {gid: side for side, gid in state.foot_geoms.items() if gid is not None}
+    for i in range(int(data.ncon)):
+        contact = data.contact[i]
+        for gid in (int(contact.geom1), int(contact.geom2)):
+            side = geom_to_side.get(gid)
+            if side is not None:
+                contacts[side] = True
+    feet: dict[str, dict[str, Any]] = {}
+    for side, sid in state.foot_sites.items():
+        z = float(data.site_xpos[sid][2]) if sid is not None else None
+        feet[side] = {"z_m": z, "contact": contacts[side]}
+    return feet
+
+
+def _body_state(policy, data, qpos_adr: int, state: ControlState) -> dict[str, Any]:
+    xyz = [float(v) for v in data.qpos[qpos_adr : qpos_adr + 3]]
+    quat = [float(v) for v in data.qpos[qpos_adr + 3 : qpos_adr + 7]]
+    pg = [float(v) for v in policy.get_projected_gravity()]
+    ang = [float(v) for v in policy.get_base_ang_vel()]
+    rel = policy.get_joint_pos_relative()
+    joints = {
+        name: float(rel[i])
+        for i, name in enumerate(state.joint_names)
+        if i < len(rel)
+    }
+    return {
+        "xyz": xyz,
+        "quat": quat,
+        "trunk_z_m": xyz[2],
+        "ang_vel": ang,
+        "projected_gravity": pg,
+        "upright": -pg[2],
+        "fallen": _fallen(xyz[2], pg, bool(getattr(policy, "sit_mode", False))),
+        "joints_rel_home": joints,
+        "feet": _feet(policy.model, data, state),
+    }
+
+
 def _status(policy, data, qpos_adr: int, state: ControlState) -> dict[str, Any]:
     with state.lock:
         twist = [float(v) for v in policy.vel_cmd]
@@ -245,15 +341,16 @@ def _status(policy, data, qpos_adr: int, state: ControlState) -> dict[str, Any]:
         pick_mode = bool(policy.ground_pick_mode)
         record_steps = state.record_steps
         record_path = str(state.record_path) if state.record_path else None
-    xyz = [float(v) for v in data.qpos[qpos_adr : qpos_adr + 3]]
+    sense = _body_state(policy, data, qpos_adr, state)
     return {
         "ok": True,
         "policy": policy_name,
         "twist": {"x": twist[0], "y": twist[1], "yaw": twist[2]},
         "head": head,
         "body": body,
-        "xyz": xyz,
-        "trunk_z_m": xyz[2],
+        "xyz": sense["xyz"],
+        "trunk_z_m": sense["trunk_z_m"],
+        "body_state": sense,
         "steps": steps,
         "sit_mode": sit_mode,
         "slope_mode": slope_mode,
@@ -263,11 +360,7 @@ def _status(policy, data, qpos_adr: int, state: ControlState) -> dict[str, Any]:
         "skills": skills,
         "record": {"path": record_path, "steps": record_steps},
         "obs_contract": "61d_new_cmd",
-        "command_notes": {
-            "twist": "trained",
-            "head": "trained",
-            "body": "untrained_slot",
-        },
+        "command_notes": dict(state.command_notes),
     }
 
 
@@ -299,7 +392,7 @@ def make_handler(policy, data, qpos_adr: int, state: ControlState):
                 x = float(body.get("x", body.get("lin_vel_x", 0.0)))
                 y = float(body.get("y", body.get("lin_vel_y", 0.0)))
                 yaw = float(body.get("yaw", body.get("ang_vel_z", 0.0)))
-                x, y, yaw = _clamp_twist(policy, x, y, yaw)
+                x, y, yaw = _clamp_twist(state, x, y, yaw)
                 with state.lock:
                     policy.set_vel_cmd(x, y, yaw)
                 _json(self, 200, _status(policy, data, qpos_adr, state))
@@ -377,6 +470,11 @@ def main() -> int:
         default=None,
         help="JSONL datacollect: obs[61], action[14], command[13], xyz, skill",
     )
+    parser.add_argument(
+        "--manifest",
+        default=None,
+        help="Hub manifest.json next to policy.onnx (command meaning / twist caps)",
+    )
     args = parser.parse_args()
 
     rl_root = Path(args.rl_root).resolve()
@@ -414,12 +512,24 @@ def main() -> int:
         new_cmd_obs=True,
         use_projected_gravity=True,
     )
-    policy.vel_max_x = 0.3
-    policy.vel_min_x = -0.3
-    policy.vel_max_y = 0.2
-    policy.vel_min_y = -0.2
-    policy.vel_max_ang = 1.5
+    state = ControlState()
+    manifest_path = Path(args.manifest).expanduser() if args.manifest else onnx.with_name("manifest.json")
+    _apply_manifest(state, load_manifest(manifest_path))
+    policy.vel_max_x = state.twist_caps["x"]
+    policy.vel_min_x = -state.twist_caps["x"]
+    policy.vel_max_y = state.twist_caps["y"]
+    policy.vel_min_y = -state.twist_caps["y"]
+    policy.vel_max_ang = state.twist_caps["yaw"]
     policy.set_vel_cmd(0.0, 0.0, 0.0)
+    _bind_body(state, model)
+    if state.manifest:
+        print(
+            f"microduck-skill: command from manifest {state.manifest.get('name')!r} "
+            f"kind={state.manifest.get('kind')} twist_caps={state.twist_caps}",
+            flush=True,
+        )
+    else:
+        print(f"microduck-skill: no manifest; walk twist caps {state.twist_caps}", flush=True)
 
     freejoint_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "trunk_base_freejoint")
     qpos_adr = int(model.jnt_qposadr[freejoint_id])
@@ -445,7 +555,6 @@ def main() -> int:
         print("microduck-skill: bind must be localhost (agent control is local-only)", file=sys.stderr)
         return 2
 
-    state = ControlState()
     if args.record:
         state.record_path = Path(args.record).expanduser().resolve()
         state.record_path.parent.mkdir(parents=True, exist_ok=True)

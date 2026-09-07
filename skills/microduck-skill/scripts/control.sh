@@ -9,6 +9,7 @@ usage() {
   cat <<'EOF'
 usage:
   control.sh start --onnx PATH | --repo USER/NAME [--standing|--sitstand|--sit|--slope|--ground-pick|--kick-left|--kick-right|--roulade FILE] ...
+  control.sh search [WORD] [--json]
   control.sh pull USER/NAME [--as walk|standing|sitstand|sit|slope|ground_pick|kick_left|kick_right|roulade]
   control.sh twist [--x M] [--y M] [--yaw RAD]
   control.sh head [--neck RAD] [--pitch RAD] [--yaw RAD] [--roll RAD] [--reset]
@@ -20,14 +21,14 @@ usage:
   control.sh status
   control.sh shutdown
 
---repo / pull fetch Hub policy.onnx (gated 61→14). --as copies extras into
-.microduck-plugin-skills/. Sit/kick/roll/pick stay valid verbs (loaded|untrained).
+search lists Hub repos that have policy.onnx (not a store). --repo / pull fetch
+one. Sit/kick/roll/pick stay valid verbs (loaded|untrained).
 HTTP is localhost only. play.sh is still the Viser checkpoint viewer.
 EOF
 }
 
 CMD="${1:-}"
-[ -n "$CMD" ] || { usage; die "usage: control.sh start|pull|twist|head|body|sit|stand|do|stop|status|shutdown"; }
+[ -n "$CMD" ] || { usage; die "usage: control.sh start|search|pull|twist|head|body|sit|stand|do|stop|status|shutdown"; }
 shift || true
 
 STATE_NAME=".microduck-plugin-control.json"
@@ -143,7 +144,7 @@ case "$CMD" in
     resolve_rl_root
     if [ -n "$REPO" ]; then
       ONNX="$(hub_fetch "$REPO")"
-      echo "microduck-skill: if you own a duck: sudo robotctl policy load walk $REPO"
+      python3 "$SCRIPT_DIR/hub_manifest.py" hint "$REPO" "$(dirname "$ONNX")/manifest.json"
     fi
     [ -f "$ONNX" ] || die "policy is not a file: $ONNX"
     SKILLS_DIR="${MICRODUCK_SKILLS_DIR:-$RL_ROOT/.microduck-plugin-skills}"
@@ -203,6 +204,10 @@ case "$CMD" in
     [ -n "$ROULADE" ] && ARGS+=(--roulade "$ROULADE")
     [ "$VIEWER" -eq 1 ] && ARGS+=(--viewer)
     [ -n "$RECORD" ] && ARGS+=(--record "$RECORD")
+    MANIFEST="$(dirname "$ONNX")/manifest.json"
+    if [ -f "$MANIFEST" ]; then
+      ARGS+=(--manifest "$MANIFEST")
+    fi
 
     HOSTPORT="$BIND"
     case "$HOSTPORT" in
@@ -226,9 +231,29 @@ PY
     echo "microduck-skill: control start $URL  (cwd=$RL_ROOT)"
     cd "$RL_ROOT"
     if [ "$DETACH" -eq 1 ]; then
-      nohup "${PY[@]}" "$SCRIPT_DIR/control_server.py" "${ARGS[@]}" >"$RL_ROOT/.microduck-plugin-control.log" 2>&1 &
-      echo "{\"pid\": $!, \"url\": \"$URL\", \"onnx\": \"$ONNX\"}" >"$ST"
-      echo "microduck-skill: detached pid $!  log=$RL_ROOT/.microduck-plugin-control.log"
+      LOG="$RL_ROOT/.microduck-plugin-control.log"
+      CMD_JSON="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1:]))' "${PY[@]}" "$SCRIPT_DIR/control_server.py" "${ARGS[@]}")"
+      DETACH_PID="$(
+        export CMD_JSON LOG ST URL ONNX
+        python3 - <<'PY'
+import json, os, subprocess
+cmd = json.loads(os.environ["CMD_JSON"])
+log = open(os.environ["LOG"], "a", encoding="utf-8")
+proc = subprocess.Popen(
+    cmd,
+    stdin=subprocess.DEVNULL,
+    stdout=log,
+    stderr=subprocess.STDOUT,
+    start_new_session=True,
+    cwd=os.getcwd(),
+)
+open(os.environ["ST"], "w", encoding="utf-8").write(
+    json.dumps({"pid": proc.pid, "url": os.environ["URL"], "onnx": os.environ["ONNX"]})
+)
+print(proc.pid)
+PY
+      )"
+      echo "microduck-skill: detached pid $DETACH_PID  log=$LOG"
       i=0
       while [ "$i" -lt 45 ]; do
         if python3 - "$URL" <<'PY' >/dev/null 2>&1
@@ -247,6 +272,39 @@ PY
       echo "{\"pid\": $$, \"url\": \"$URL\", \"onnx\": \"$ONNX\"}" >"$ST"
       exec "${PY[@]}" "$SCRIPT_DIR/control_server.py" "${ARGS[@]}"
     fi
+    ;;
+  search)
+    JSON=0
+    LIMIT=""
+    Q=""
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --json) JSON=1; shift ;;
+        --limit) LIMIT="${2:-}"; shift 2 ;;
+        -h|--help) usage; exit 0 ;;
+        *)
+          [ -z "$Q" ] || die "search takes one query (got extra: $1)"
+          Q="$1"
+          shift
+          ;;
+      esac
+    done
+    Q="${Q:-microduck}"
+    require_cmd python3
+    resolve_rl_root
+    PY=("$RL_ROOT/.venv/bin/python")
+    if [ ! -x "${PY[0]}" ]; then
+      require_cmd uv
+      PY=(uv run --with huggingface_hub python3)
+    fi
+    ARGS=("$SCRIPT_DIR/hub_search.py" "$Q")
+    if [ -n "$LIMIT" ]; then
+      ARGS+=(--limit "$LIMIT")
+    fi
+    if [ "$JSON" = 1 ]; then
+      ARGS+=(--json)
+    fi
+    exec "${PY[@]}" "${ARGS[@]}"
     ;;
   pull)
     REPO="${1:-}"

@@ -5,6 +5,7 @@ against the vendored Agent Plugins 1.0 schema in schemas/plugin.schema.json.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import py_compile
 import re
@@ -145,9 +146,62 @@ def check_scripts() -> None:
         die("replay.py not found")
     if not any(p.name == "hub_pull.py" for p in pys):
         die("hub_pull.py not found")
+    if not any(p.name == "hub_search.py" for p in pys):
+        die("hub_search.py not found")
+    if not any(p.name == "hub_manifest.py" for p in pys):
+        die("hub_manifest.py not found")
     for py in pys:
         py_compile.compile(str(py), doraise=True)
         print(f"ci_check: {py.relative_to(ROOT)} compiles")
+
+    def _load(path: Path, name: str):
+        spec = importlib.util.spec_from_file_location(name, path)
+        if spec is None or spec.loader is None:
+            die(f"cannot load {path.name}")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    manifest = _load(next(p for p in pys if p.name == "hub_manifest.py"), "microduck_hub_manifest_ci")
+    if not manifest.twist_is_velocity(
+        {"command": {"twist": ["x m/s", "y m/s", "yaw rad/s"]}}
+    ):
+        die("walk twist must keep velocity caps")
+    if manifest.twist_is_velocity(
+        {
+            "command": {
+                "twist": [
+                    "flag: 0 = stand on two feet",
+                    "side: +1 = right foot down",
+                    "unused (0)",
+                ]
+            }
+        }
+    ):
+        die("flamingo twist must not use walk velocity caps")
+    if manifest.twist_is_velocity(
+        {"description": "Stand on one foot: twist = [flag, side, 0]."}
+    ):
+        die("description-only remap must not use walk velocity caps")
+    if "sim-only" not in manifest.deploy_hint(
+        "RemiFabre/microduck-flamingo-cycle",
+        {
+            "name": "flamingo-cycle",
+            "eval": {"known_limits": "never tested on hardware"},
+        },
+    ):
+        die("sim-only manifest must not print walk robotctl")
+    print("ci_check: twist / deploy hint ok")
+    server = _load(next(p for p in pys if p.name == "control_server.py"), "microduck_control_server_ci")
+    if server._fallen(0.12, [0.0, 0.0, -1.0]):
+        die("upright stand must not count as fallen")
+    if not server._fallen(0.03, [0.0, 0.0, -1.0]):
+        die("low trunk must count as fallen")
+    if server._fallen(0.03, [0.0, 0.0, -1.0], sit_mode=True):
+        die("sit must not count as fallen from low trunk")
+    if not server._fallen(0.12, [0.9, 0.0, -0.1], sit_mode=True):
+        die("hard tilt must count as fallen even while sitting")
+    print("ci_check: fallen heuristic ok")
     exports = [p for p in scripts if p.name == "export_publish.sh"]
     if not exports:
         die("export_publish.sh not found")

@@ -183,6 +183,12 @@ def check_scripts() -> None:
         {"description": "Stand on one foot: twist = [flag, side, 0]."}
     ):
         die("description-only remap must not use walk velocity caps")
+    if not manifest.is_episodic({"kind": "episodic", "duration_s": 3}):
+        die("episodic kind must be detected")
+    if manifest.is_episodic({"kind": "perpetual"}):
+        die("perpetual must not count as episodic")
+    if manifest.is_behavior_extra({"kind": "perpetual"}):
+        die("perpetual extras must not auto-load as short swaps")
     if "sim-only" not in manifest.deploy_hint(
         "RemiFabre/microduck-flamingo-cycle",
         {

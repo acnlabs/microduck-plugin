@@ -19,6 +19,8 @@ $SKILL/scripts/control.sh pull <user>/microduck-sitstand --as sitstand
 
 `search` queries Hugging Face and prints repos that contain `policy.onnx`. Downloads/likes are Hub counts, not quality. The **script** does not start a server or a train. **You** (the agent) do the next step: pick one by name/README, tell the human which repo, then `start --repo` / `pull --as`, gate, and try it in sim. Do not hand the CLI back. Do not start a train from a search hit. Gate + what the sim actually does remain the filter.
 
+`kind: episodic` graphs (hop, kick, roll) are a **short session swap**, not the standing body. Do not `start --repo` them. `start` a walk/stand ONNX, `pull --as name`, then `do name`. That uses the official kick/roulade timer: zero command, duration from `manifest.duration_s`, then back to the standing graph. Not a J-key, not hop-specific.
+
 `--repo` and `--onnx` are exclusive. `pull --as` copies extras into `$MICRODUCK_RL_ROOT/.microduck-plugin-skills/` so the next `start` auto-loads them. Optional local extras: `--standing` `--sitstand` `--sit` `--slope` `--ground-pick` `--kick-left` `--kick-right` `--roulade`.
 
 If a flag is omitted, start also loads any matching file in `$MICRODUCK_RL_ROOT/.microduck-plugin-skills/`. Kick ONNX switches the scene to the official ball XML. `--bind` stays localhost.

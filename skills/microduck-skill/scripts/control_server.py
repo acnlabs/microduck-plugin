@@ -27,6 +27,7 @@ if str(_SCRIPTS) not in sys.path:
 from hub_manifest import (  # noqa: E402
     WALK_COMMAND_NOTES,
     WALK_TWIST_CAPS,
+    behavior_duration_s,
     command_notes,
     load_manifest,
     twist_caps,
@@ -59,6 +60,31 @@ class ControlState:
         self.joint_names: list[str] = []
         self.foot_sites: dict[str, int | None] = {"left": None, "right": None}
         self.foot_geoms: dict[str, int | None] = {"left": None, "right": None}
+
+
+def _register_behaviors(policy, specs: list[str]) -> None:
+    import onnxruntime as ort
+
+    for spec in specs:
+        if "=" not in spec:
+            raise SystemExit(f"microduck-skill: --behavior must be NAME=PATH, got {spec!r}")
+        name, raw = spec.split("=", 1)
+        name = name.strip()
+        path = Path(raw).expanduser()
+        if not name.isidentifier() or not name.islower():
+            raise SystemExit(f"microduck-skill: bad behavior name {name!r}")
+        if not path.is_file():
+            raise SystemExit(f"microduck-skill: behavior onnx missing: {path}")
+        if name in policy.behavior_sessions:
+            print(f"microduck-skill: behavior {name} already loaded", flush=True)
+            continue
+        manifest = load_manifest(path.with_name(f"{name}.manifest.json")) or load_manifest(
+            path.with_name("manifest.json")
+        )
+        duration = behavior_duration_s(manifest)
+        policy.behavior_sessions[name] = ort.InferenceSession(str(path))
+        policy.behavior_durations[name] = duration
+        print(f"microduck-skill: behavior {name} {path.name} auto-return {duration:.1f}s", flush=True)
 
 
 def _apply_manifest(state: ControlState, manifest: dict[str, Any] | None) -> None:
@@ -176,6 +202,8 @@ def _skill_states(policy) -> dict[str, str]:
         "kick_right": "kick_right" in policy.behavior_sessions,
         "roulade": "roulade" in policy.behavior_sessions,
     }
+    for name in policy.behavior_sessions:
+        flags[name] = True
     return {name: ("loaded" if on else "untrained") for name, on in flags.items()}
 
 
@@ -221,9 +249,7 @@ def _do_skill(policy, name: str) -> SkillResult:
             return SkillResult(name, executed=False, state="loaded", error=f"cannot ground_pick during {policy.behavior_mode}")
         policy.trigger_ground_pick()
         return SkillResult(name, executed=True, state="loaded")
-    if name in {"kick_left", "kick_right", "roulade"}:
-        if name not in policy.behavior_sessions:
-            return SkillResult(name, executed=False, state="untrained")
+    if name in policy.behavior_sessions:
         if policy.behavior_mode is not None:
             return SkillResult(name, executed=False, state="loaded", error=f"{policy.behavior_mode} already running")
         if policy.ground_pick_mode:
@@ -234,6 +260,8 @@ def _do_skill(policy, name: str) -> SkillResult:
             return SkillResult(name, executed=False, state="loaded", error=f"cannot start {name} during slope")
         policy.trigger_behavior(name)
         return SkillResult(name, executed=True, state="loaded")
+    if name in {"kick_left", "kick_right", "roulade"}:
+        return SkillResult(name, executed=False, state="untrained")
     return SkillResult(name, executed=False, state="unknown", error=f"unknown skill: {name}")
 
 
@@ -466,6 +494,12 @@ def main() -> int:
         default=None,
         help="Hub manifest.json next to policy.onnx (command meaning / twist caps)",
     )
+    parser.add_argument(
+        "--behavior",
+        action="append",
+        default=[],
+        help="Episodic extra NAME=PATH (same session swap as official kick/roulade)",
+    )
     args = parser.parse_args()
 
     rl_root = Path(args.rl_root).resolve()
@@ -512,6 +546,7 @@ def main() -> int:
     policy.vel_min_y = -state.twist_caps["y"]
     policy.vel_max_ang = state.twist_caps["yaw"]
     policy.set_vel_cmd(0.0, 0.0, 0.0)
+    _register_behaviors(policy, args.behavior)
     _bind_body(state, model)
     if state.manifest:
         print(

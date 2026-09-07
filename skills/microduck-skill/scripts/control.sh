@@ -10,19 +10,20 @@ usage() {
 usage:
   control.sh start --onnx PATH | --repo USER/NAME [--standing|--sitstand|--sit|--slope|--ground-pick|--kick-left|--kick-right|--roulade FILE] ...
   control.sh search [WORD] [--json]
-  control.sh pull USER/NAME [--as walk|standing|sitstand|sit|slope|ground_pick|kick_left|kick_right|roulade]
+  control.sh pull USER/NAME [--as walk|standing|sitstand|sit|slope|ground_pick|kick_left|kick_right|roulade|NAME]
   control.sh twist [--x M] [--y M] [--yaw RAD]
   control.sh head [--neck RAD] [--pitch RAD] [--yaw RAD] [--roll RAD] [--reset]
   control.sh body [--x M] [--y M] [--z M] [--roll RAD] [--pitch RAD] [--yaw RAD] [--reset]
   control.sh sit [--off]
   control.sh stand
-  control.sh do sit|stand|kick_left|kick_right|roulade|ground_pick|slope
+  control.sh do sit|stand|kick_left|kick_right|roulade|ground_pick|slope|NAME
   control.sh stop
   control.sh status
   control.sh shutdown
 
 search lists Hub repos that have policy.onnx (not a store). --repo / pull fetch
-one. Sit/kick/roll/pick stay valid verbs (loaded|untrained).
+one. Episodic graphs (hop, kick, …) are pull --as NAME then do NAME, not start --repo.
+Sit/kick/roll/pick stay valid verbs (loaded|untrained).
 HTTP is localhost only. play.sh is still the Viser checkpoint viewer.
 EOF
 }
@@ -147,6 +148,7 @@ case "$CMD" in
       python3 "$SCRIPT_DIR/hub_manifest.py" hint "$REPO" "$(dirname "$ONNX")/manifest.json"
     fi
     [ -f "$ONNX" ] || die "policy is not a file: $ONNX"
+    python3 "$SCRIPT_DIR/hub_manifest.py" check-start "$(dirname "$ONNX")/manifest.json"
     SKILLS_DIR="${MICRODUCK_SKILLS_DIR:-$RL_ROOT/.microduck-plugin-skills}"
     if [ -z "$STANDING" ]; then STANDING="$(first_existing "$SKILLS_DIR/standing.onnx" || true)"; fi
     if [ -z "$SITSTAND" ]; then SITSTAND="$(first_existing "$SKILLS_DIR/sitstand.onnx" "$SKILLS_DIR/BEST_alpha_sitstand.onnx" || true)"; fi
@@ -178,6 +180,21 @@ case "$CMD" in
     [ -n "$KICK_L" ] && gate_onnx "$KICK_L" kick_left
     [ -n "$KICK_R" ] && gate_onnx "$KICK_R" kick_right
     [ -n "$ROULADE" ] && gate_onnx "$ROULADE" roulade
+    BEHAVIORS=""
+    if [ -d "$SKILLS_DIR" ]; then
+      for f in "$SKILLS_DIR"/*.onnx; do
+        [ -f "$f" ] || continue
+        stem="$(basename "$f" .onnx)"
+        case "$stem" in
+          standing|sitstand|sit|slope|ground_pick|ground-pick|kick_left|kick_right|roulade|ball_kick_left|ball_kick_right|BEST_alpha_sitstand) continue ;;
+        esac
+        if [ -f "$SKILLS_DIR/${stem}.manifest.json" ]; then
+          python3 "$SCRIPT_DIR/hub_manifest.py" is-behavior "$SKILLS_DIR/${stem}.manifest.json" || continue
+        fi
+        gate_onnx "$f" "$stem"
+        BEHAVIORS="${BEHAVIORS}${BEHAVIORS:+ }$stem=$(abs_file "$f")"
+      done
+    fi
 
     PY=("$RL_ROOT/.venv/bin/python")
     if [ ! -x "${PY[0]}" ]; then
@@ -202,6 +219,11 @@ case "$CMD" in
     [ -n "$KICK_L" ] && ARGS+=(--kick-left "$KICK_L")
     [ -n "$KICK_R" ] && ARGS+=(--kick-right "$KICK_R")
     [ -n "$ROULADE" ] && ARGS+=(--roulade "$ROULADE")
+    if [ -n "$BEHAVIORS" ]; then
+      for spec in $BEHAVIORS; do
+        ARGS+=(--behavior "$spec")
+      done
+    fi
     [ "$VIEWER" -eq 1 ] && ARGS+=(--viewer)
     [ -n "$RECORD" ] && ARGS+=(--record "$RECORD")
     MANIFEST="$(dirname "$ONNX")/manifest.json"
@@ -320,7 +342,9 @@ PY
     done
     case "$AS" in
       walk|standing|sitstand|sit|slope|ground_pick|kick_left|kick_right|roulade) ;;
-      *) die "unknown --as $AS (walk|standing|sitstand|sit|slope|ground_pick|kick_left|kick_right|roulade)" ;;
+      *)
+        echo "$AS" | grep -Eq '^[a-z][a-z0-9_]{0,31}$' || die "unknown --as $AS (walk|standing|sitstand|sit|slope|ground_pick|kick_left|kick_right|roulade|lowercase_name)"
+        ;;
     esac
     require_cmd uv
     require_cmd python3
@@ -332,10 +356,13 @@ PY
       SKILLS_DIR="${MICRODUCK_SKILLS_DIR:-$RL_ROOT/.microduck-plugin-skills}"
       mkdir -p "$SKILLS_DIR"
       cp "$ONNX" "$SKILLS_DIR/${AS}.onnx"
+      if [ -f "$(dirname "$ONNX")/manifest.json" ]; then
+        cp "$(dirname "$ONNX")/manifest.json" "$SKILLS_DIR/${AS}.manifest.json"
+      fi
       echo "microduck-skill: installed $AS -> $SKILLS_DIR/${AS}.onnx"
     fi
     echo "microduck-skill: pulled $REPO ($AS) $ONNX"
-    echo "microduck-skill: if you own a duck: sudo robotctl policy add $AS $REPO"
+    python3 "$SCRIPT_DIR/hub_manifest.py" hint "$REPO" "$(dirname "$ONNX")/manifest.json"
     ;;
   twist)
     X=0 Y=0 YAW=0
@@ -436,7 +463,8 @@ PY
   stand) http POST /stand "{}" ;;
   do)
     SKILL_NAME="${1:-}"
-    [ -n "$SKILL_NAME" ] || die "do requires a skill: sit|stand|kick_left|kick_right|roulade|ground_pick|slope"
+    [ -n "$SKILL_NAME" ] || die "do requires a skill name"
+    echo "$SKILL_NAME" | grep -Eq '^[a-z][a-z0-9_]{0,31}$' || die "bad skill name: $SKILL_NAME"
     http POST /do "{\"skill\": \"$SKILL_NAME\"}"
     ;;
   stop) http POST /stop "{}" ;;

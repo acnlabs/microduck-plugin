@@ -96,6 +96,33 @@ def command_notes(manifest: dict[str, Any] | None) -> dict[str, Any]:
     }
 
 
+def is_episodic(manifest: dict[str, Any] | None) -> bool:
+    return bool(manifest) and str(manifest.get("kind") or "").lower() == "episodic"
+
+
+def is_behavior_extra(manifest: dict[str, Any] | None) -> bool:
+    """Hub extras with kind=perpetual stay off the short-swap list."""
+    if not manifest:
+        return True
+    kind = str(manifest.get("kind") or "").lower()
+    if not kind:
+        return True
+    return kind == "episodic"
+
+
+def behavior_duration_s(manifest: dict[str, Any] | None, default: float = 3.0) -> float:
+    if not manifest:
+        return default
+    raw = manifest.get("duration_s")
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return default
+    if value <= 0:
+        return default
+    return value
+
+
 def is_sim_only(manifest: dict[str, Any] | None) -> bool:
     if not manifest:
         return False
@@ -129,13 +156,32 @@ def deploy_hint(repo: str, manifest: dict[str, Any] | None) -> str:
 
 
 def main() -> int:
-    if len(sys.argv) < 2 or sys.argv[1] != "hint":
+    if len(sys.argv) < 2:
         print("usage: hub_manifest.py hint USER/NAME [manifest.json]", file=sys.stderr)
+        print("       hub_manifest.py check-start [manifest.json]", file=sys.stderr)
+        print("       hub_manifest.py is-behavior [manifest.json]", file=sys.stderr)
         return 2
-    repo = sys.argv[2] if len(sys.argv) > 2 else ""
-    path = sys.argv[3] if len(sys.argv) > 3 else ""
-    print(deploy_hint(repo, load_manifest(path) if path else None))
-    return 0
+    cmd = sys.argv[1]
+    if cmd == "hint":
+        repo = sys.argv[2] if len(sys.argv) > 2 else ""
+        path = sys.argv[3] if len(sys.argv) > 3 else ""
+        print(deploy_hint(repo, load_manifest(path) if path else None))
+        return 0
+    if cmd == "check-start":
+        path = sys.argv[2] if len(sys.argv) > 2 else ""
+        if is_episodic(load_manifest(path) if path else None):
+            print(
+                "microduck-skill: this repo is episodic (a short graph, not the standing body). "
+                "start a walk/stand ONNX, pull --as NAME, then do NAME",
+                file=sys.stderr,
+            )
+            return 2
+        return 0
+    if cmd == "is-behavior":
+        path = sys.argv[2] if len(sys.argv) > 2 else ""
+        return 0 if is_behavior_extra(load_manifest(path) if path else None) else 2
+    print("usage: hub_manifest.py hint|check-start|is-behavior ...", file=sys.stderr)
+    return 2
 
 
 if __name__ == "__main__":

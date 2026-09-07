@@ -40,7 +40,7 @@ $SKILL/scripts/control.sh stop          # zeros twist only
 | head | neck/pitch ±1.10, yaw ±1.40, roll ±0.31 rad | same mechanical caps |
 | body | xy ±0.02 m, z ±0.03 m, angles ±30° | same mechanical caps |
 
-`status.body_state` is this robot, not a skill score. Same card for every ONNX: trunk pose, projected gravity / `upright` / `fallen` (hard tilt, or trunk z < 0.06 m while not sitting — sit is a low pose, not a fall), `ang_vel` and `joints_rel_home` from the same 61D the policy sees, `feet.left|right` from official `left_foot` / `right_foot` sites plus contact. Do not invent a per-trick metric.
+`status.body_state` is this robot, not a skill score. Same card for every ONNX: trunk pose, projected gravity / `upright` / `tilt_deg` (angle from vertical, same gravity the policy sees), `ang_vel` and `joints_rel_home` from the 61D obs, `feet.left|right` from official `left_foot` / `right_foot` sites plus contact. Do not invent `fallen` or a per-trick metric. Say what the numbers are.
 
 Skills are always valid verbs. `status.skills` is `loaded` or `untrained` (no weight yet). Untrained `do` / `sit` returns HTTP 200, `executed: false`, `skill_state: "untrained"`. 409 is only a real conflict (e.g. kick while sitting).
 

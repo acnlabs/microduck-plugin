@@ -45,11 +45,6 @@ def _load_infer(rl_root: Path):
     return mod
 
 
-# Robot body, not a skill score. Spawn trunk z is 0.125 in infer_policy.
-FALLEN_TRUNK_Z_M = 0.06
-FALLEN_UPRIGHT = 0.5
-
-
 class ControlState:
     def __init__(self) -> None:
         self.lock = threading.Lock()
@@ -259,13 +254,9 @@ def _skill_payload(policy, data, qpos_adr: int, state: ControlState, result: Ski
     return 200, payload
 
 
-def _fallen(trunk_z_m: float, projected_gravity: list[float], sit_mode: bool = False) -> bool:
-    upright = -float(projected_gravity[2])
-    if upright < FALLEN_UPRIGHT:
-        return True
-    if sit_mode:
-        return False
-    return trunk_z_m < FALLEN_TRUNK_Z_M
+def _tilt_deg(projected_gravity: list[float]) -> float:
+    upright = max(-1.0, min(1.0, -float(projected_gravity[2])))
+    return math.degrees(math.acos(upright))
 
 
 def _bind_body(state: ControlState, model) -> None:
@@ -320,7 +311,7 @@ def _body_state(policy, data, qpos_adr: int, state: ControlState) -> dict[str, A
         "ang_vel": ang,
         "projected_gravity": pg,
         "upright": -pg[2],
-        "fallen": _fallen(xyz[2], pg, bool(getattr(policy, "sit_mode", False))),
+        "tilt_deg": _tilt_deg(pg),
         "joints_rel_home": joints,
         "feet": _feet(policy.model, data, state),
     }

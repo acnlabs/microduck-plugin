@@ -193,15 +193,11 @@ def check_scripts() -> None:
         die("sim-only manifest must not print walk robotctl")
     print("ci_check: twist / deploy hint ok")
     server = _load(next(p for p in pys if p.name == "control_server.py"), "microduck_control_server_ci")
-    if server._fallen(0.12, [0.0, 0.0, -1.0]):
-        die("upright stand must not count as fallen")
-    if not server._fallen(0.03, [0.0, 0.0, -1.0]):
-        die("low trunk must count as fallen")
-    if server._fallen(0.03, [0.0, 0.0, -1.0], sit_mode=True):
-        die("sit must not count as fallen from low trunk")
-    if not server._fallen(0.12, [0.9, 0.0, -0.1], sit_mode=True):
-        die("hard tilt must count as fallen even while sitting")
-    print("ci_check: fallen heuristic ok")
+    if abs(server._tilt_deg([0.0, 0.0, -1.0])) > 1e-6:
+        die("upright stand must report tilt_deg 0")
+    if abs(server._tilt_deg([0.0, 1.0, 0.0]) - 90.0) > 1e-6:
+        die("sideways gravity must report tilt_deg 90")
+    print("ci_check: tilt_deg ok")
     exports = [p for p in scripts if p.name == "export_publish.sh"]
     if not exports:
         die("export_publish.sh not found")

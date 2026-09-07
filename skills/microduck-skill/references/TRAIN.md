@@ -76,7 +76,13 @@ $SKILL/scripts/play.sh Mjlab-Your-Task-Id --checkpoint-file /path/model_N.pt
 # or --wandb-run-path <entity>/mjlab_microduck/<run_id>
 ```
 
-`play.sh` defaults to `--viewer viser` (localhost webpage) and `--video` (mp4 under `logs/<experiment>/…/videos/play`). That clip stays local unless you upload it. `MICRODUCK_PLAY_VIDEO=0` or `MICRODUCK_PLAY_VIEWER=native` to change. Mac CPU play is slow.
+`play.sh` defaults to `--viewer viser` (localhost webpage) and `--video` (mp4 under `logs/<experiment>/…/videos/play`). That clip stays local unless you upload it. `MICRODUCK_PLAY_VIDEO=0` or `MICRODUCK_PLAY_VIEWER=native` to change. Mac CPU play is slow. After a gated ONNX, drive the duck with `$SKILL/scripts/control.sh` ([CONTROL.md](CONTROL.md)) — that is the runtime-shaped loop, not Viser.
+
+## Agent recordings have no official ingest
+
+`dataset.sh` check/pack/replay is the end of the official path. **Do not add `--from-record` to `train.sh`.** `uv run train` is mjlab + rsl_rl **on-policy PPO**. It has no offline / demo / BC flag. The only trajectory file mjlab accepts is `motion.npz` on **tracking** tasks (humanoid motion clone). Microduck walk/sit/kick are command-sampling envs, not tracking tasks. The HF "dataset" in `hf_jobs.py` is the source tarball for Jobs, not demonstrations.
+
+A homemade "follow the recording" net would also miss `scripts/export.py` (it wants an rsl_rl checkpoint). Do not hand-export ONNX. If we later want agent data to change weights, that is a new trainer or an upstream mjlab/rsl_rl change — not a flag on this skill.
 
 Budgets at 4096 envs: simple episodic ≈ 1000 iters; gaits / recovery 4000–6000. A usable walk is often 1–2 hours.
 

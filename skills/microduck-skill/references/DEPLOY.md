@@ -12,10 +12,22 @@ Watch a checkpoint in the training env (localhost Viser, optional local mp4):
 $SKILL/scripts/play.sh Mjlab-Velocity-Flat-MicroDuck --checkpoint-file /path/model_N.pt
 ```
 
-ONNX / runtime contract (CPU MuJoCo, not Viser) from `MICRODUCK_RL_ROOT`:
+ONNX / runtime contract (CPU MuJoCo, not Viser) — prefer the skill wrapper (localhost HTTP, official `infer_policy`, `--new-cmd-obs`):
 
 ```bash
-uv run scripts/infer_policy.py --walking output.onnx
+$SKILL/scripts/control.sh start --onnx "$MICRODUCK_RL_ROOT/.microduck-plugin-export.onnx" --detach
+# or a community / own Hub repo:
+$SKILL/scripts/control.sh start --repo <user>/microduck-walk --detach
+$SKILL/scripts/control.sh twist --x 0.25
+$SKILL/scripts/control.sh head --yaw 0.4
+$SKILL/scripts/control.sh status
+$SKILL/scripts/control.sh shutdown
+```
+
+`--viewer` if you want the native window (macOS: `mjpython`). Raw official CLI is still valid:
+
+```bash
+uv run scripts/infer_policy.py --walking output.onnx --new-cmd-obs
 # hot-swap rehearsal — same 61D contract the runtime uses
 uv run scripts/infer_policy.py --walking walk.onnx --standing stand.onnx \
   --sitstand sitstand.onnx --new-cmd-obs

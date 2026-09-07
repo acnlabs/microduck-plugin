@@ -1,4 +1,4 @@
-# Shared by smoke.sh / train.sh / play.sh / export_publish.sh / doctor.sh. Source only.
+# Shared by smoke.sh / train.sh / play.sh / control.sh / dataset.sh / export_publish.sh / doctor.sh. Source only.
 
 die() {
   echo "microduck-skill: $*" >&2

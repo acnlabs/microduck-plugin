@@ -134,12 +134,20 @@ def check_scripts() -> None:
     for path in sh:
         subprocess.run(["bash", "-n", str(path)], check=True)
         print(f"ci_check: bash -n {path.relative_to(ROOT)} ok")
-    gates = [p for p in scripts if p.name == "gate_check.py"]
-    if not gates:
+    pys = [p for p in scripts if p.suffix == ".py"]
+    if not any(p.name == "gate_check.py" for p in pys):
         die("gate_check.py not found")
-    for gate in gates:
-        py_compile.compile(str(gate), doraise=True)
-        print(f"ci_check: {gate.relative_to(ROOT)} compiles")
+    if not any(p.name == "control_server.py" for p in pys):
+        die("control_server.py not found")
+    if not any(p.name == "dataset.py" for p in pys):
+        die("dataset.py not found")
+    if not any(p.name == "replay.py" for p in pys):
+        die("replay.py not found")
+    if not any(p.name == "hub_pull.py" for p in pys):
+        die("hub_pull.py not found")
+    for py in pys:
+        py_compile.compile(str(py), doraise=True)
+        print(f"ci_check: {py.relative_to(ROOT)} compiles")
     exports = [p for p in scripts if p.name == "export_publish.sh"]
     if not exports:
         die("export_publish.sh not found")

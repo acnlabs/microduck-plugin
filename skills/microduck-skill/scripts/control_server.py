@@ -1,0 +1,542 @@
+#!/usr/bin/env python3
+"""Localhost HTTP control loop for a gated Microduck ONNX.
+
+Imports official infer_policy.PolicyInference from MICRODUCK_RL_ROOT
+(same 61D / BAM path as the robot). Does not convert checkpoints.
+Default is headless so an agent can drive the duck without a display.
+"""
+
+from __future__ import annotations
+
+import argparse
+import importlib.util
+import json
+import math
+import os
+import sys
+import threading
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from typing import Any
+from urllib.parse import urlparse
+
+
+def _load_infer(rl_root: Path):
+    path = rl_root / "scripts" / "infer_policy.py"
+    if not path.is_file():
+        raise SystemExit(f"microduck-skill: missing official infer_policy.py: {path}")
+    spec = importlib.util.spec_from_file_location("microduck_infer_policy", path)
+    if spec is None or spec.loader is None:
+        raise SystemExit(f"microduck-skill: cannot import {path}")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+class ControlState:
+    def __init__(self) -> None:
+        self.lock = threading.Lock()
+        self.shutdown = False
+        self.steps = 0
+        self.record_path: Path | None = None
+        self.record_fh: Any = None
+        self.record_steps = 0
+
+
+class SkillResult:
+    def __init__(self, skill: str, *, executed: bool, state: str, error: str | None = None) -> None:
+        self.skill = skill
+        self.executed = executed
+        self.state = state
+        self.error = error
+
+
+def _json(handler: BaseHTTPRequestHandler, code: int, payload: dict[str, Any]) -> None:
+    body = json.dumps(payload).encode("utf-8")
+    handler.send_response(code)
+    handler.send_header("Content-Type", "application/json")
+    handler.send_header("Content-Length", str(len(body)))
+    handler.end_headers()
+    handler.wfile.write(body)
+
+
+# Training / runtime caps for the 13D command (twist + head + body).
+# Head: mechanical deltas from HOME in microduck_velocity_env_cfg.
+# Body: infer_policy BODY_CMD_MAX_* (walk reward is ~0; slot is for API parity).
+HEAD_KEYS = ("neck_pitch", "head_pitch", "head_yaw", "head_roll")
+HEAD_ALIASES = {"neck": "neck_pitch", "pitch": "head_pitch", "yaw": "head_yaw", "roll": "head_roll"}
+HEAD_CAPS = {"neck_pitch": 1.10, "head_pitch": 1.10, "head_yaw": 1.40, "head_roll": 0.31}
+BODY_KEYS = ("x", "y", "z", "roll", "pitch", "yaw")
+BODY_CAPS = {
+    "x": 0.02,
+    "y": 0.02,
+    "z": 0.03,
+    "roll": math.radians(30),
+    "pitch": math.radians(30),
+    "yaw": math.radians(30),
+}
+
+
+def _clamp_twist(policy, x: float, y: float, yaw: float) -> tuple[float, float, float]:
+    x = max(policy.vel_min_x, min(policy.vel_max_x, x))
+    y = max(policy.vel_min_y, min(policy.vel_max_y, y))
+    yaw = max(-policy.vel_max_ang, min(policy.vel_max_ang, yaw))
+    return x, y, yaw
+
+
+def _pick(body: dict[str, Any], key: str, *aliases: str, default: Any = None) -> Any:
+    if key in body:
+        return body[key]
+    for alias in aliases:
+        if alias in body:
+            return body[alias]
+    return default
+
+
+def _set_head(policy, body: dict[str, Any]) -> None:
+    if body.get("reset"):
+        policy.head_offset[:] = 0
+    else:
+        for i, key in enumerate(HEAD_KEYS):
+            raw = _pick(body, key, *(a for a, k in HEAD_ALIASES.items() if k == key))
+            if raw is None:
+                continue
+            cap = HEAD_CAPS[key]
+            policy.head_offset[i] = max(-cap, min(cap, float(raw)))
+    policy._update_command()
+
+
+def _set_body(policy, body: dict[str, Any]) -> None:
+    if body.get("reset"):
+        policy.body_cmd[:] = 0
+    else:
+        for i, key in enumerate(BODY_KEYS):
+            if key not in body:
+                continue
+            cap = BODY_CAPS[key]
+            policy.body_cmd[i] = max(-cap, min(cap, float(body[key])))
+    policy._update_command()
+
+
+def _head_dict(policy) -> dict[str, float]:
+    return {k: float(policy.head_offset[i]) for i, k in enumerate(HEAD_KEYS)}
+
+
+def _body_dict(policy) -> dict[str, float]:
+    return {k: float(policy.body_cmd[i]) for i, k in enumerate(BODY_KEYS)}
+
+
+SKILL_ALIASES = {
+    "pick": "ground_pick",
+    "ground-pick": "ground_pick",
+    "kick-left": "kick_left",
+    "left-kick": "kick_left",
+    "kick-right": "kick_right",
+    "right-kick": "kick_right",
+    "roll": "roulade",
+    "sitstand": "sit",
+    "stand": "stand",
+}
+
+
+def _skill_states(policy) -> dict[str, str]:
+    flags = {
+        "walking": policy.walking_session is not None,
+        "standing": policy.standing_session is not None,
+        "sit": policy.sit_session is not None,
+        "sitstand": bool(policy.is_sitstand),
+        "slope": policy.slope_session is not None,
+        "ground_pick": policy.ground_pick_session is not None,
+        "kick_left": "kick_left" in policy.behavior_sessions,
+        "kick_right": "kick_right" in policy.behavior_sessions,
+        "roulade": "roulade" in policy.behavior_sessions,
+    }
+    return {name: ("loaded" if on else "untrained") for name, on in flags.items()}
+
+
+def _set_sit(policy, on: bool) -> SkillResult:
+    skill = "sit" if on else "stand"
+    if policy.sit_session is None:
+        return SkillResult(skill, executed=False, state="untrained")
+    if policy.ground_pick_mode:
+        return SkillResult(skill, executed=False, state="loaded", error="cannot sit during ground_pick")
+    if policy.behavior_mode is not None:
+        return SkillResult(skill, executed=False, state="loaded", error=f"cannot sit during {policy.behavior_mode}")
+    if bool(policy.sit_mode) != bool(on):
+        policy.toggle_sit()
+    return SkillResult(skill, executed=True, state="loaded")
+
+
+def _set_slope(policy, on: bool) -> SkillResult:
+    if policy.slope_session is None:
+        return SkillResult("slope", executed=False, state="untrained")
+    if policy.behavior_mode is not None:
+        return SkillResult("slope", executed=False, state="loaded", error=f"cannot slope during {policy.behavior_mode}")
+    if bool(policy.slope_mode) != bool(on):
+        policy.toggle_slope_mode()
+    return SkillResult("slope", executed=True, state="loaded")
+
+
+def _do_skill(policy, name: str) -> SkillResult:
+    name = SKILL_ALIASES.get(name, name)
+    if name == "sit":
+        return _set_sit(policy, True)
+    if name == "stand":
+        return _set_sit(policy, False)
+    if name == "slope":
+        return _set_slope(policy, True)
+    if name == "ground_pick":
+        if policy.ground_pick_session is None:
+            return SkillResult(name, executed=False, state="untrained")
+        if policy.ground_pick_mode:
+            return SkillResult(name, executed=False, state="loaded", error="ground_pick already running")
+        if policy.sit_mode:
+            return SkillResult(name, executed=False, state="loaded", error="cannot ground_pick while sitting")
+        if policy.behavior_mode is not None:
+            return SkillResult(name, executed=False, state="loaded", error=f"cannot ground_pick during {policy.behavior_mode}")
+        policy.trigger_ground_pick()
+        return SkillResult(name, executed=True, state="loaded")
+    if name in {"kick_left", "kick_right", "roulade"}:
+        if name not in policy.behavior_sessions:
+            return SkillResult(name, executed=False, state="untrained")
+        if policy.behavior_mode is not None:
+            return SkillResult(name, executed=False, state="loaded", error=f"{policy.behavior_mode} already running")
+        if policy.ground_pick_mode:
+            return SkillResult(name, executed=False, state="loaded", error=f"cannot start {name} during ground_pick")
+        if policy.sit_mode:
+            return SkillResult(name, executed=False, state="loaded", error=f"cannot start {name} while sitting")
+        if policy.slope_mode:
+            return SkillResult(name, executed=False, state="loaded", error=f"cannot start {name} during slope")
+        policy.trigger_behavior(name)
+        return SkillResult(name, executed=True, state="loaded")
+    return SkillResult(name, executed=False, state="unknown", error=f"unknown skill: {name}")
+
+
+def _skill_payload(policy, data, qpos_adr: int, state: ControlState, result: SkillResult) -> tuple[int, dict[str, Any]]:
+    payload = _status(policy, data, qpos_adr, state)
+    payload["executed"] = result.executed
+    payload["skill"] = result.skill
+    payload["skill_state"] = result.state
+    if result.error:
+        payload["error"] = result.error
+    if result.state == "unknown":
+        payload["ok"] = False
+        return 400, payload
+    if result.error and result.state == "loaded":
+        payload["ok"] = False
+        return 409, payload
+    payload["ok"] = True
+    return 200, payload
+
+
+def _status(policy, data, qpos_adr: int, state: ControlState) -> dict[str, Any]:
+    with state.lock:
+        twist = [float(v) for v in policy.vel_cmd]
+        steps = state.steps
+        policy_name = policy.current_policy
+        head = _head_dict(policy)
+        body = _body_dict(policy)
+        skills = _skill_states(policy)
+        sit_mode = bool(policy.sit_mode)
+        behavior = policy.behavior_mode
+        behavior_left = float(policy.behavior_time_left) if behavior else 0.0
+        slope_mode = bool(policy.slope_mode)
+        pick_mode = bool(policy.ground_pick_mode)
+        record_steps = state.record_steps
+        record_path = str(state.record_path) if state.record_path else None
+    xyz = [float(v) for v in data.qpos[qpos_adr : qpos_adr + 3]]
+    return {
+        "ok": True,
+        "policy": policy_name,
+        "twist": {"x": twist[0], "y": twist[1], "yaw": twist[2]},
+        "head": head,
+        "body": body,
+        "xyz": xyz,
+        "trunk_z_m": xyz[2],
+        "steps": steps,
+        "sit_mode": sit_mode,
+        "slope_mode": slope_mode,
+        "ground_pick_mode": pick_mode,
+        "behavior": behavior,
+        "behavior_s_left": behavior_left,
+        "skills": skills,
+        "record": {"path": record_path, "steps": record_steps},
+        "obs_contract": "61d_new_cmd",
+        "command_notes": {
+            "twist": "trained",
+            "head": "trained",
+            "body": "untrained_slot",
+        },
+    }
+
+
+def make_handler(policy, data, qpos_adr: int, state: ControlState):
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, fmt: str, *args: Any) -> None:
+            sys.stderr.write("microduck-skill: control " + (fmt % args) + "\n")
+
+        def do_GET(self) -> None:
+            if urlparse(self.path).path == "/status":
+                _json(self, 200, _status(policy, data, qpos_adr, state))
+                return
+            _json(self, 404, {"ok": False, "error": "not found"})
+
+        def do_POST(self) -> None:
+            path = urlparse(self.path).path
+            length = int(self.headers.get("Content-Length", "0") or 0)
+            raw = self.rfile.read(length) if length else b"{}"
+            try:
+                body = json.loads(raw.decode("utf-8") or "{}")
+            except json.JSONDecodeError:
+                _json(self, 400, {"ok": False, "error": "invalid json"})
+                return
+            if not isinstance(body, dict):
+                _json(self, 400, {"ok": False, "error": "json object required"})
+                return
+
+            if path == "/twist":
+                x = float(body.get("x", body.get("lin_vel_x", 0.0)))
+                y = float(body.get("y", body.get("lin_vel_y", 0.0)))
+                yaw = float(body.get("yaw", body.get("ang_vel_z", 0.0)))
+                x, y, yaw = _clamp_twist(policy, x, y, yaw)
+                with state.lock:
+                    policy.set_vel_cmd(x, y, yaw)
+                _json(self, 200, _status(policy, data, qpos_adr, state))
+                return
+            if path == "/head":
+                with state.lock:
+                    _set_head(policy, body)
+                _json(self, 200, _status(policy, data, qpos_adr, state))
+                return
+            if path == "/body":
+                with state.lock:
+                    _set_body(policy, body)
+                _json(self, 200, _status(policy, data, qpos_adr, state))
+                return
+            if path == "/stop":
+                with state.lock:
+                    policy.set_vel_cmd(0.0, 0.0, 0.0)
+                _json(self, 200, _status(policy, data, qpos_adr, state))
+                return
+            if path == "/sit":
+                on = body.get("on", True)
+                if isinstance(on, str):
+                    on = on.lower() not in {"0", "false", "off", "no"}
+                with state.lock:
+                    result = _set_sit(policy, bool(on))
+                code, payload = _skill_payload(policy, data, qpos_adr, state, result)
+                _json(self, code, payload)
+                return
+            if path == "/stand":
+                with state.lock:
+                    result = _set_sit(policy, False)
+                code, payload = _skill_payload(policy, data, qpos_adr, state, result)
+                _json(self, code, payload)
+                return
+            if path == "/do":
+                skill = str(body.get("skill", body.get("name", ""))).strip()
+                if not skill:
+                    _json(self, 400, {"ok": False, "error": "skill required"})
+                    return
+                with state.lock:
+                    result = _do_skill(policy, skill)
+                code, payload = _skill_payload(policy, data, qpos_adr, state, result)
+                _json(self, code, payload)
+                return
+            if path == "/shutdown":
+                with state.lock:
+                    policy.set_vel_cmd(0.0, 0.0, 0.0)
+                    state.shutdown = True
+                _json(self, 200, {"ok": True, "shutdown": True})
+                return
+            _json(self, 404, {"ok": False, "error": "not found"})
+
+    return Handler
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Drive a gated Microduck ONNX on localhost")
+    parser.add_argument("--onnx", required=True, help="Gated walking policy.onnx")
+    parser.add_argument("--rl-root", required=True, help="pollen-robotics/microduck_rl checkout")
+    parser.add_argument("--standing", default=None)
+    parser.add_argument("--sitstand", default=None)
+    parser.add_argument("--sit", default=None)
+    parser.add_argument("--slope", default=None)
+    parser.add_argument("--ground-pick", default=None)
+    parser.add_argument("--kick-left", default=None)
+    parser.add_argument("--kick-right", default=None)
+    parser.add_argument("--roulade", default=None)
+    parser.add_argument("--kick-duration", type=float, default=3.0)
+    parser.add_argument("--roulade-duration", type=float, default=2.0)
+    parser.add_argument("--ground-pick-period", type=float, default=4.0)
+    parser.add_argument("--bind", default=os.environ.get("MICRODUCK_CONTROL_BIND", "127.0.0.1:8765"))
+    parser.add_argument("--viewer", action="store_true", help="Open native MuJoCo (needs display / mjpython on macOS)")
+    parser.add_argument(
+        "--record",
+        default=None,
+        help="JSONL datacollect: obs[61], action[14], command[13], xyz, skill",
+    )
+    args = parser.parse_args()
+
+    rl_root = Path(args.rl_root).resolve()
+    onnx = Path(args.onnx).resolve()
+    if not onnx.is_file():
+        print(f"microduck-skill: --onnx is not a file: {onnx}", file=sys.stderr)
+        return 2
+
+    infer = _load_infer(rl_root)
+    os.chdir(rl_root)
+
+    import mujoco
+
+    xml_path = infer.MICRODUCK_BALL_XML if (args.kick_left or args.kick_right) else infer.MICRODUCK_XML
+    bam_model = infer.load_bam_model(infer.BAM_KP_FW, 7.4, None)
+    model, data, bam_ctrl, _names = infer.load_mujoco_with_bam(
+        xml_path, bam_model, 0.005, 0.1, infer.BAM_VIN_MIN
+    )
+    policy = infer.PolicyInference(
+        model,
+        data,
+        bam_ctrl=bam_ctrl,
+        walking_onnx_path=str(onnx),
+        standing_onnx_path=args.standing,
+        sitstand_onnx_path=args.sitstand,
+        sit_onnx_path=args.sit,
+        slope_onnx_path=args.slope,
+        ground_pick_onnx_path=args.ground_pick,
+        kick_left_onnx_path=args.kick_left,
+        kick_right_onnx_path=args.kick_right,
+        roulade_onnx_path=args.roulade,
+        kick_duration=args.kick_duration,
+        roulade_duration=args.roulade_duration,
+        ground_pick_period=args.ground_pick_period,
+        new_cmd_obs=True,
+        use_projected_gravity=True,
+    )
+    policy.vel_max_x = 0.3
+    policy.vel_min_x = -0.3
+    policy.vel_max_y = 0.2
+    policy.vel_min_y = -0.2
+    policy.vel_max_ang = 1.5
+    policy.set_vel_cmd(0.0, 0.0, 0.0)
+
+    freejoint_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "trunk_base_freejoint")
+    qpos_adr = int(model.jnt_qposadr[freejoint_id])
+    data.qpos[qpos_adr + 0] = 0.0
+    data.qpos[qpos_adr + 1] = 0.0
+    data.qpos[qpos_adr + 2] = 0.125
+    data.qpos[qpos_adr + 3 : qpos_adr + 7] = [1, 0, 0, 0]
+    for i, qpos_idx in enumerate(policy.joint_qpos_indices):
+        data.qpos[qpos_idx] = policy.default_pose[i]
+    bam_ctrl.reset(data.qpos)
+    policy.set_position_targets(policy.default_pose)
+    mujoco.mj_forward(model, data)
+
+    obs = policy.get_observations()
+    if obs.size != 61:
+        print(f"microduck-skill: expected 61D obs, got {obs.size}", file=sys.stderr)
+        return 2
+
+    host, _, port_s = args.bind.rpartition(":")
+    host = host or "127.0.0.1"
+    port = int(port_s or "8765")
+    if host not in {"127.0.0.1", "localhost", "::1"}:
+        print("microduck-skill: bind must be localhost (agent control is local-only)", file=sys.stderr)
+        return 2
+
+    state = ControlState()
+    if args.record:
+        state.record_path = Path(args.record).expanduser().resolve()
+        state.record_path.parent.mkdir(parents=True, exist_ok=True)
+        state.record_fh = state.record_path.open("w", encoding="utf-8")
+
+    server = ThreadingHTTPServer((host, port), make_handler(policy, data, qpos_adr, state))
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    skills = _skill_states(policy)
+    print(f"microduck-skill: control listening http://{host}:{port}  onnx={onnx.name}", flush=True)
+    print(f"microduck-skill: skills {skills}", flush=True)
+    print(
+        'microduck-skill: POST /twist /head /body /sit /stand /do /stop  GET /status  POST /shutdown',
+        flush=True,
+    )
+
+    decimation = 4
+    control_dt = decimation * float(model.opt.timestep)
+    viewer = None
+    if args.viewer:
+        try:
+            viewer = mujoco.viewer.launch_passive(model, data, show_left_ui=False, show_right_ui=False)
+        except RuntimeError as exc:
+            print(f"microduck-skill: viewer failed ({exc}); continuing headless", file=sys.stderr)
+            viewer = None
+
+    t0 = time.time()
+    try:
+        while True:
+            step_start = time.time()
+            with state.lock:
+                if state.shutdown:
+                    break
+                if viewer is not None and not viewer.is_running():
+                    break
+                policy.update_ground_pick_phase(control_dt)
+                policy.update_behavior(control_dt)
+                obs = policy.get_observations()
+                action = policy.infer()
+                policy.apply_action(action)
+                cmd = [float(v) for v in policy.vel_cmd]
+                command = [float(v) for v in policy.command]
+                head_snap = _head_dict(policy)
+                body_snap = _body_dict(policy)
+                policy_snap = policy.current_policy
+                obs_list = [float(v) for v in obs]
+                action_list = [float(v) for v in action]
+            for _ in range(decimation):
+                bam_ctrl.update()
+                mujoco.mj_step(model, data)
+            if viewer is not None:
+                viewer.sync()
+            xyz = [float(v) for v in data.qpos[qpos_adr : qpos_adr + 3]]
+            with state.lock:
+                state.steps += 1
+                if state.record_fh is not None:
+                    state.record_fh.write(
+                        json.dumps(
+                            {
+                                "t": time.time() - t0,
+                                "obs": obs_list,
+                                "action": action_list,
+                                "command": command,
+                                "skill": policy_snap,
+                                "twist": {"x": cmd[0], "y": cmd[1], "yaw": cmd[2]},
+                                "head": head_snap,
+                                "body": body_snap,
+                                "xyz": xyz,
+                            }
+                        )
+                        + "\n"
+                    )
+                    state.record_steps += 1
+                    if state.record_steps % 50 == 0:
+                        state.record_fh.flush()
+            sleep = control_dt - (time.time() - step_start)
+            if sleep > 0:
+                time.sleep(sleep)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.shutdown()
+        if viewer is not None:
+            viewer.close()
+        if state.record_fh is not None:
+            state.record_fh.flush()
+            state.record_fh.close()
+            print(f"microduck-skill: wrote {state.record_steps} steps to {state.record_path}", flush=True)
+        print("microduck-skill: control stopped", flush=True)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

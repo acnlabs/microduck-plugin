@@ -150,6 +150,18 @@ def check_scripts() -> None:
         die("hub_search.py not found")
     if not any(p.name == "hub_manifest.py" for p in pys):
         die("hub_manifest.py not found")
+    if not any(p.name == "hub_preview.py" for p in pys):
+        die("hub_preview.py not found")
+    if not any(p.name == "preview.sh" for p in sh):
+        die("preview.sh not found")
+    preview_sh = next(p for p in sh if p.name == "preview.sh")
+    preview_text = preview_sh.read_text()
+    if "preview skipped" not in preview_text:
+        die("preview.sh must skip instead of failing publish")
+    if "resolve_rl_root" in preview_text:
+        die("preview.sh must not call resolve_rl_root (that exits 1)")
+    if "robotctl" in preview_text and "Not robotctl" not in preview_text:
+        die("preview.sh must not run robotctl")
     for py in pys:
         py_compile.compile(str(py), doraise=True)
         print(f"ci_check: {py.relative_to(ROOT)} compiles")
@@ -198,6 +210,26 @@ def check_scripts() -> None:
     ):
         die("sim-only manifest must not print walk robotctl")
     print("ci_check: twist / deploy hint ok")
+    preview = _load(next(p for p in pys if p.name == "hub_preview.py"), "microduck_hub_preview_ci")
+    first = preview.embed_preview("# walk\n\nNot an official Pollen policy.\n")
+    if "preview.mp4" not in first or preview.BEGIN not in first:
+        die("preview embed must insert preview.mp4")
+    again = preview.embed_preview(first + "extra\n")
+    if again.count(preview.BEGIN) != 1 or again.count("preview.mp4") != 1:
+        die("preview embed must be idempotent")
+    fm = preview.embed_preview("---\ntags:\n- microduck\n---\n\n# walk\n")
+    if not fm.startswith("---") or fm.index(preview.BEGIN) < fm.index("---", 3):
+        die("preview embed must stay after YAML frontmatter")
+    import tempfile as _tmp
+
+    with _tmp.TemporaryDirectory() as td:
+        clip = Path(td) / "logs" / "run" / "videos" / "play" / "rl-video-step-0.mp4"
+        clip.parent.mkdir(parents=True)
+        clip.write_bytes(b"fake")
+        found = preview.find_play_mp4(Path(td))
+        if found != clip.resolve():
+            die(f"find_play_mp4 missed {clip}, got {found}")
+    print("ci_check: hub preview embed ok")
     server = _load(next(p for p in pys if p.name == "control_server.py"), "microduck_control_server_ci")
     if abs(server._tilt_deg([0.0, 0.0, -1.0])) > 1e-6:
         die("upright stand must report tilt_deg 0")

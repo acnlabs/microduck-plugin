@@ -60,4 +60,17 @@ Need `HF_TOKEN` with write access to `--repo`. Repos look like `<user>/microduck
 
 ## After publish
 
+Try a card preview for **this** `--repo`. Optional; never fail the publish if it skips:
+
+```bash
+$SKILL/scripts/preview.sh \
+  --repo <hf-user>/microduck-polite-bow \
+  --task Mjlab-PoliteBow-Flat-MicroDuck \
+  --checkpoint-file /path/model_N.pt
+# or, if play already wrote a clip:
+$SKILL/scripts/preview.sh --repo <hf-user>/microduck-polite-bow --mp4 /path/clip.mp4
+```
+
+That uploads `preview.mp4` and embeds it in the Hub README. It is a `play.sh` checkpoint replay, not `control.sh` ONNX, not a robot, not a ranking. Jobs cannot record; Mac CPU play is slow. `preview skipped` is a valid outcome. Re-running `export_publish.sh` rewrites the official README and drops the embed — run `preview.sh` again after a republish.
+
 Give the user the Hub URL and the **printed** install lines from [DEPLOY.md](DEPLOY.md). Do not SSH to a duck.

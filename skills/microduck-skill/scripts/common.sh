@@ -1,4 +1,4 @@
-# Shared by smoke.sh / train.sh / play.sh / control.sh / dataset.sh / export_publish.sh / doctor.sh. Source only.
+# Shared by smoke.sh / train.sh / play.sh / preview.sh / control.sh / dataset.sh / export_publish.sh / doctor.sh. Source only.
 
 die() {
   echo "microduck-skill: $*" >&2
@@ -26,14 +26,18 @@ resolve_rl_root() {
   is_rl_checkout "$RL_ROOT" || die "not a microduck_rl checkout (need src/mjlab_microduck): $RL_ROOT"
 }
 
-require_hf_token() {
+have_hf_token() {
   if [ -n "${HF_TOKEN:-}" ] || [ -n "${HUGGING_FACE_HUB_TOKEN:-}" ]; then
     return 0
   fi
   if [ -f "${HF_HOME:-$HOME/.cache/huggingface}/token" ] || [ -f "$HOME/.huggingface/token" ]; then
     return 0
   fi
-  die "HF_TOKEN (or hf auth login) is required"
+  return 1
+}
+
+require_hf_token() {
+  have_hf_token || die "HF_TOKEN (or hf auth login) is required"
 }
 
 jobs_mode() {

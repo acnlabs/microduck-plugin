@@ -76,7 +76,7 @@ $SKILL/scripts/play.sh Mjlab-Your-Task-Id --checkpoint-file /path/model_N.pt
 # or --wandb-run-path <entity>/mjlab_microduck/<run_id>
 ```
 
-`play.sh` defaults to `--viewer viser` (localhost webpage) and `--video` (mp4 under `logs/<experiment>/…/videos/play`). That clip stays local unless you upload it. `MICRODUCK_PLAY_VIDEO=0` or `MICRODUCK_PLAY_VIEWER=native` to change. Mac CPU play is slow. After a gated ONNX, drive the duck with `$SKILL/scripts/control.sh` ([CONTROL.md](CONTROL.md)) — that is the runtime-shaped loop, not Viser.
+`play.sh` defaults to `--viewer viser` (localhost webpage) and `--video` (mp4 under `logs/<experiment>/…/videos/play`). That clip stays local unless `$SKILL/scripts/preview.sh --repo …` uploads it as `preview.mp4` on **this run's** Hub card. Preview is optional and must not fail publish. `MICRODUCK_PLAY_VIDEO=0` or `MICRODUCK_PLAY_VIEWER=native` to change. Mac CPU play is slow. After a gated ONNX, drive the duck with `$SKILL/scripts/control.sh` ([CONTROL.md](CONTROL.md)) — that is the runtime-shaped loop, not Viser.
 
 ## Agent recordings have no official ingest
 

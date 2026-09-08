@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "microduck-plugin",
-  "version": "0.1.14",
+  "version": "0.1.15",
   "description": "Agent Plugins 1.0 package: train, export, publish, drive a sim Microduck on localhost, and deploy RL policies. robotctl runs only when the user asks to install on a robot they own.",
   "license": "MIT",
   "author": {

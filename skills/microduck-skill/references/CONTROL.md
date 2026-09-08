@@ -15,6 +15,10 @@ $SKILL/scripts/control.sh search flamingo
 # then fetch one (downloads policy.onnx, then gates):
 $SKILL/scripts/control.sh start --repo <user>/microduck-walk --detach
 $SKILL/scripts/control.sh pull <user>/microduck-sitstand --as sitstand
+# worked examples (community Hub graphs, not official Pollen, not in this git):
+$SKILL/scripts/control.sh start --repo neil-jo/microduck-walk --detach
+$SKILL/scripts/control.sh pull neil-jo/microduck-polite-bow --as polite_bow
+$SKILL/scripts/control.sh do polite_bow
 ```
 
 `search` queries Hugging Face and prints repos that contain `policy.onnx`. Downloads/likes are Hub counts, not quality. The **script** does not start a server or a train. **You** (the agent) do the next step: pick one by name/README, tell the human which repo, then `start --repo` / `pull --as`, gate, and try it in sim. Do not hand the CLI back. Do not start a train from a search hit. Gate + what the sim actually does remain the filter.

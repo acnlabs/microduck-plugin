@@ -18,14 +18,39 @@ microduck-plugin/
 
 Clone this repository. Add **the directory that contains `plugin.json`** to an [Agent Plugins](https://agent-plugins.org) client (Cursor, GitHub Copilot, ChatGPT/Codex, VS Code, Kiro). Do not add only `skills/microduck-skill` if the client supports plugins.
 
-How the client is told to load a plugin directory is client-specific. Two portable options:
-
 ```bash
 git clone https://github.com/acnlabs/microduck-plugin
 # Point the client at that folder (the one with plugin.json).
 ```
 
-If the client only scans Agent Skills (not plugins), point it at `skills/microduck-skill`.
+If the client only scans Agent Skills (not plugins):
+
+```bash
+npx skills add acnlabs/microduck-plugin@microduck-skill -g -y
+```
+
+Or point it at `skills/microduck-skill` after a clone.
+
+ClawHub listing for `microduck-skill` is still pending review. Use GitHub / `npx skills add` until it is public.
+
+## Worked examples (Hub, not bundled)
+
+Walk and bow are **not** ONNX files in this repo. They are community Hub graphs this plugin's loop produced. Not official Pollen policies.
+
+| Policy | Hub | kind |
+|---|---|---|
+| walk | https://huggingface.co/neil-jo/microduck-walk | perpetual gait |
+| polite-bow | https://huggingface.co/neil-jo/microduck-polite-bow | episodic 4s |
+
+Localhost (agent runs `control.sh`; do not paste these for a human to type):
+
+```bash
+$SKILL/scripts/control.sh start --repo neil-jo/microduck-walk --detach
+$SKILL/scripts/control.sh pull neil-jo/microduck-polite-bow --as polite_bow
+$SKILL/scripts/control.sh do polite_bow
+```
+
+Do not `start --repo` the bow graph. After publish, print `robotctl` for **this run's** repo. Run those commands only if the user owns a Microduck and asks to install.
 
 **v0 scope:** new behavior → smoke → train (default: Hugging Face Jobs, requires `MICRODUCK_HF_NAMESPACE`) → official ONNX export → Hub publish → localhost sim control → deploy. Optional `wandb login` turns on webpage curves. Jobs cannot record `--video` (no OpenGL). `play.sh` is local Viser + local mp4 (training checkpoint). The agent runs `control.sh` (search / start / twist / `do`) itself — do not expect the human to type those. After publish the skill always prints `robotctl` for that repo. It runs those commands only if you explicitly ask to install on a Microduck you own.
 

@@ -14,16 +14,28 @@ REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 PREVIEW_NAME = "preview.mp4"
 BEGIN = "<!-- microduck-skill:preview -->"
 END = "<!-- /microduck-skill:preview -->"
-PREVIEW_BODY = """## Preview
 
-<video src="preview.mp4" controls muted loop width="100%"></video>
+
+def preview_src(repo: str) -> str:
+    return f"https://huggingface.co/{repo}/resolve/main/{PREVIEW_NAME}"
+
+
+def preview_body(repo: str) -> str:
+    src = preview_src(repo)
+    return f"""## Preview
+
+<video controls muted loop width="100%">
+  <source src="{src}" type="video/mp4">
+</video>
 
 Sim checkpoint replay (`play.sh`). Not the ONNX runtime path, not a real robot, not an official Pollen policy.
 """
 
 
-def embed_preview(readme: str) -> str:
-    block = f"{BEGIN}\n{PREVIEW_BODY.strip()}\n{END}\n"
+def embed_preview(readme: str, repo: str) -> str:
+    if not REPO_RE.match(repo):
+        raise ValueError(f"repo must be USER/NAME, got {repo!r}")
+    block = f"{BEGIN}\n{preview_body(repo).strip()}\n{END}\n"
     if BEGIN in readme and END in readme:
         pre, rest = readme.split(BEGIN, 1)
         _, post = rest.split(END, 1)
@@ -77,7 +89,7 @@ def upload_preview(repo: str, mp4: Path) -> None:
             text = ""
         else:
             raise
-    updated = embed_preview(text)
+    updated = embed_preview(text, repo)
     if updated != text:
         tmp = ""
         try:

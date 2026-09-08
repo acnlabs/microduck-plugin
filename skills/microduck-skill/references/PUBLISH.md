@@ -71,6 +71,6 @@ $SKILL/scripts/preview.sh \
 $SKILL/scripts/preview.sh --repo <hf-user>/microduck-polite-bow --mp4 /path/clip.mp4
 ```
 
-That uploads `preview.mp4` and embeds it in the Hub README. It is a `play.sh` checkpoint replay, not `control.sh` ONNX, not a robot, not a ranking. Jobs cannot record; Mac CPU play is slow. `preview skipped` is a valid outcome. Re-running `export_publish.sh` rewrites the official README and drops the embed — run `preview.sh` again after a republish.
+That uploads `preview.mp4` and embeds a Hub `resolve/main` URL in the README (a relative `src="preview.mp4"` does not play on the card). `play.sh` is a viewer and does not exit; preview stops it after the clip. It is a checkpoint replay, not `control.sh` ONNX, not a robot, not a ranking. Jobs cannot record; Mac CPU play is slow. `preview skipped` is a valid outcome. Re-running `export_publish.sh` rewrites the official README and drops the embed — run `preview.sh` again after a republish. Point people at the model card to watch; `/resolve/main/` in the browser downloads the file.
 
 Give the user the Hub URL and the **printed** install lines from [DEPLOY.md](DEPLOY.md). Do not SSH to a duck.

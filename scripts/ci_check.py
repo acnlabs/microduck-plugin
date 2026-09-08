@@ -211,13 +211,15 @@ def check_scripts() -> None:
         die("sim-only manifest must not print walk robotctl")
     print("ci_check: twist / deploy hint ok")
     preview = _load(next(p for p in pys if p.name == "hub_preview.py"), "microduck_hub_preview_ci")
-    first = preview.embed_preview("# walk\n\nNot an official Pollen policy.\n")
-    if "preview.mp4" not in first or preview.BEGIN not in first:
-        die("preview embed must insert preview.mp4")
-    again = preview.embed_preview(first + "extra\n")
+    first = preview.embed_preview("# walk\n\nNot an official Pollen policy.\n", "neil-jo/microduck-walk")
+    if "huggingface.co/neil-jo/microduck-walk/resolve/main/preview.mp4" not in first:
+        die("preview embed must use the Hub resolve URL, not a relative src")
+    if 'src="preview.mp4"' in first:
+        die("relative preview.mp4 src does not play on Hub cards")
+    again = preview.embed_preview(first + "extra\n", "neil-jo/microduck-walk")
     if again.count(preview.BEGIN) != 1 or again.count("preview.mp4") != 1:
         die("preview embed must be idempotent")
-    fm = preview.embed_preview("---\ntags:\n- microduck\n---\n\n# walk\n")
+    fm = preview.embed_preview("---\ntags:\n- microduck\n---\n\n# walk\n", "neil-jo/microduck-walk")
     if not fm.startswith("---") or fm.index(preview.BEGIN) < fm.index("---", 3):
         die("preview embed must stay after YAML frontmatter")
     import tempfile as _tmp

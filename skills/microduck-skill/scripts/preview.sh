@@ -14,7 +14,9 @@ usage:
 
 Uploads preview.mp4 to this run's Hub card and embeds it in README.
 Checkpoint replay only — not ONNX control.sh, not a robot, not a ranking.
-Play / upload failure prints "preview skipped" and exits 0.
+play.sh is a viewer and does not exit. This script starts it, waits for the
+clip, then stops the viewer. Play / upload failure prints "preview skipped"
+and exits 0.
 EOF
 }
 
@@ -44,6 +46,24 @@ skip() {
   exit 0
 }
 
+file_size() {
+  if stat -f %z "$1" >/dev/null 2>&1; then
+    stat -f %z "$1"
+  else
+    stat -c %s "$1"
+  fi
+}
+
+has_flag() {
+  local needle="$1" a
+  for a in "${PLAY_ARGS[@]+"${PLAY_ARGS[@]}"}"; do
+    case "$a" in
+      "$needle"|"$needle"=*) return 0 ;;
+    esac
+  done
+  return 1
+}
+
 if [ -z "$MP4" ]; then
   [ -n "$TASK" ] || skip "need --task and a checkpoint, or pass --mp4"
   SOURCE=0
@@ -60,14 +80,46 @@ if [ -z "$MP4" ]; then
   else
     skip "set MICRODUCK_RL_ROOT to a microduck_rl checkout"
   fi
+  has_flag --num-envs || PLAY_ARGS+=(--num-envs 1)
   SINCE="$(date +%s)"
-  echo "microduck-skill: play for preview (cwd=$RL_ROOT)"
-  if ! "$SCRIPT_DIR/play.sh" "$TASK" "${PLAY_ARGS[@]}"; then
-    skip "play.sh failed (Jobs has no GL; Mac CPU play is slow)"
-  fi
-  if ! MP4="$(python3 "$SCRIPT_DIR/hub_preview.py" --find-root "$RL_ROOT" --since "$SINCE")"; then
-    skip "play wrote no mp4 under logs/**/videos/play/"
-  fi
+  WAIT_S="${MICRODUCK_PREVIEW_WAIT_S:-1800}"
+  echo "microduck-skill: play for preview (cwd=$RL_ROOT, wait ${WAIT_S}s)"
+  "$SCRIPT_DIR/play.sh" "$TASK" "${PLAY_ARGS[@]}" &
+  PLAY_PID=$!
+  stop_play() {
+    if [ -n "${PLAY_PID:-}" ] && kill -0 "$PLAY_PID" 2>/dev/null; then
+      kill "$PLAY_PID" 2>/dev/null || true
+      sleep 1
+      kill -9 "$PLAY_PID" 2>/dev/null || true
+      wait "$PLAY_PID" 2>/dev/null || true
+    fi
+  }
+  trap stop_play EXIT
+  DEADLINE=$((SINCE + WAIT_S))
+  FOUND=""
+  while [ "$(date +%s)" -lt "$DEADLINE" ]; do
+    if ! kill -0 "$PLAY_PID" 2>/dev/null; then
+      wait "$PLAY_PID" || true
+      PLAY_PID=""
+      break
+    fi
+    if CAND="$(python3 "$SCRIPT_DIR/hub_preview.py" --find-root "$RL_ROOT" --since "$SINCE" 2>/dev/null)"; then
+      S1="$(file_size "$CAND")"
+      sleep 3
+      S2="$(file_size "$CAND")"
+      if [ "$S1" = "$S2" ] && [ "$S1" -gt 1000 ]; then
+        FOUND="$CAND"
+        break
+      fi
+    else
+      sleep 5
+    fi
+  done
+  stop_play
+  trap - EXIT
+  PLAY_PID=""
+  [ -n "$FOUND" ] || skip "play wrote no mp4 under logs/**/videos/play/ within ${WAIT_S}s"
+  MP4="$FOUND"
 fi
 
 [ -f "$MP4" ] || skip "not a file: $MP4"

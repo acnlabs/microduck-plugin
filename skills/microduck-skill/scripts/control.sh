@@ -85,7 +85,7 @@ first_existing() {
 gate_onnx() {
   local f="$1" label="$2"
   echo "microduck-skill: gate $label $f"
-  uv run --with onnx python3 "$SCRIPT_DIR/gate_check.py" "$f" >/dev/null
+  run_gate_check "$SCRIPT_DIR/gate_check.py" "$f" >/dev/null
   echo "microduck-skill: gate ok $label"
 }
 

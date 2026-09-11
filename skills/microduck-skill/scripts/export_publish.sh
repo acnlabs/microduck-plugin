@@ -92,7 +92,7 @@ else
 fi
 
 echo "microduck-skill: gate $ONNX"
-uv run --with onnx python3 "$SCRIPT_DIR/gate_check.py" "$ONNX"
+run_gate_check "$SCRIPT_DIR/gate_check.py" "$ONNX"
 
 # Upstream publish refuses --onnx plus --task/--wandb-run-path. Weights are
 # already an official ONNX; only manifest flags go to publish.

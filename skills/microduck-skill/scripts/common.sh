@@ -86,6 +86,22 @@ set_jobs_extra() {
   fi
 }
 
+# Prefer the checkout venv. `uv run --with onnx` downloads every start and can hang.
+run_gate_check() {
+  local script="$1"
+  shift
+  local py=""
+  if [ -n "${RL_ROOT:-}" ] && [ -x "$RL_ROOT/.venv/bin/python" ]; then
+    py="$RL_ROOT/.venv/bin/python"
+  fi
+  if [ -n "$py" ] && "$py" -c "import onnx" >/dev/null 2>&1; then
+    "$py" "$script" "$@"
+    return
+  fi
+  require_cmd uv
+  uv run --with onnx python3 "$script" "$@"
+}
+
 caller_set_num_envs() {
   local a
   for a in "$@"; do

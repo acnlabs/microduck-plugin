@@ -54,7 +54,7 @@ Canonical playbook: `AGENTS.md` in `pollen-robotics/microduck_rl`. This skill is
 | `scripts/preview.sh --repo USER/NAME …` | Optional. `play.sh` (or `--mp4`) → Hub `preview.mp4` + README embed. Failure exits 0. Not a store. |
 | `scripts/control.sh start\|search\|pull\|twist\|head\|body\|sit\|stand\|do\|stop\|status\|shutdown` | Agent runs these. Localhost 13D command. `search` lists Hub `policy.onnx`; you then `start --repo` / `pull`. Not Jobs. Not robotctl. |
 | `scripts/dataset.sh check\|pack\|replay` | Validate/pack `--record` JSONL; replay commands in sim. Not consumed by train.sh. |
-| `scripts/gate_check.py <policy.onnx>` | `[1,61]→[1,14]`; skip initializers. Called via `uv run --with onnx`. |
+| `scripts/gate_check.py <policy.onnx>` | `[1,61]→[1,14]`; skip initializers. Uses the checkout venv if it has `onnx`, else `uv run --with onnx`. |
 | `scripts/export_publish.sh …` | Official export to `$RL_ROOT/.microduck-plugin-export.onnx` only, then Hub. |
 
 ## Report back

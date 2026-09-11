@@ -71,7 +71,7 @@ case "$CMD" in
     resolve_rl_root
     ONNX="$(cd "$(dirname "$ONNX")" && pwd)/$(basename "$ONNX")"
     echo "microduck-skill: gate walk $ONNX"
-    uv run --with onnx python3 "$SCRIPT_DIR/gate_check.py" "$ONNX" >/dev/null
+    run_gate_check "$SCRIPT_DIR/gate_check.py" "$ONNX" >/dev/null
     echo "microduck-skill: gate ok walk"
     ARGS=(--record "$RECORD" --onnx "$ONNX" --rl-root "$RL_ROOT")
     [ "$ACTIONS" -eq 1 ] && ARGS+=(--actions)
